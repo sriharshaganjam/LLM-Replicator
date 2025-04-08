@@ -66,10 +66,10 @@ class WordPredictionGame:
     # This creates a basic embedding based on character counts
         embedding = np.zeros(50)
         for i, char in enumerate(word.lower()):
-        pos = ord(char) - ord('a')
-        if 0 <= pos < 26:
-            embedding[pos % len(embedding)] += 1
-    return embedding / (np.linalg.norm(embedding) + 1e-8)  # Normalize
+            pos = ord(char) - ord('a')
+            if 0 <= pos < 26:
+                embedding[pos % len(embedding)] += 1
+        return embedding / (np.linalg.norm(embedding) + 1e-8)  # Normalize
     
     def calculate_distance(self, user_word, llm_word):
         user_embedding = self.get_word_embedding(user_word)
