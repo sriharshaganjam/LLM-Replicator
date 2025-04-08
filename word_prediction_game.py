@@ -4,7 +4,6 @@ import pandas as pd
 import torch
 from sentence_transformers import SentenceTransformer
 from mistralai.client import MistralClient
-from mistralai.models.chat_completion import ChatMessage
 
 class WordPredictionGame:
     def __init__(self):
@@ -26,7 +25,7 @@ class WordPredictionGame:
             initial_response = self.mistral_client.chat(
                 model="mistral-small",
                 messages=[
-                    ChatMessage(role="user", content="Generate a random sentence that is interesting but not too complex.")
+                    {"role": "user", "content": "Generate a random sentence that is interesting but not too complex."}
                 ]
             )
             self.initial_sentence = initial_response.choices[0].message.content.strip().split()
@@ -59,7 +58,7 @@ class WordPredictionGame:
             response = self.mistral_client.chat(
                 model="mistral-small",
                 messages=[
-                    ChatMessage(role="user", content=prompt)
+                    {"role": "user", "content": prompt}
                 ],
                 temperature=temperature
             )
