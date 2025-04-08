@@ -1,6 +1,8 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
+import torch
+from sentence_transformers import SentenceTransformer
 import requests
 
 class WordPredictionGame:
@@ -10,6 +12,18 @@ class WordPredictionGame:
         if not self.mistral_api_key:
             st.error("Mistral API key not found. Please set it in the Streamlit secrets.")
             st.stop()
+
+        # Initialize embedding model (check if it's already in session state)
+        if 'embedding_model' not in st.session_state:
+            try:
+                st.session_state.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+                st.info("Sentence Transformer model loaded.")
+            except Exception as e:
+                st.error(f"Error loading Sentence Transformer model: {str(e)}")
+                st.warning("Falling back to a very basic character-based embedding. Semantic similarity will not be captured.")
+                st.session_state.embedding_model = None
+
+        self.embedding_model = st.session_state.embedding_model
 
         # Game state variables
         self.reset_game()
@@ -56,9 +70,32 @@ class WordPredictionGame:
         self.cumulative_distance = 0
         self.game_over = False
 
+    def get_word_embedding(self, word):
+        if self.embedding_model:
+            try:
+                return self.embedding_model.encode(word, convert_to_tensor=True).cpu().numpy()
+            except Exception as e:
+                st.error(f"Error getting embedding for '{word}': {str(e)}")
+                st.warning("Falling back to basic embedding for this word.")
+                embedding = np.zeros(50)
+                for i, char in enumerate(word.lower()):
+                    pos = ord(char) - ord('a')
+                    if 0 <= pos < 26:
+                        embedding[pos % len(embedding)] += 1
+                return embedding / (np.linalg.norm(embedding) + 1e-8)  # Normalize
+        else:
+            # Use the simple character-based embedding if the model failed to load
+            embedding = np.zeros(50)
+            for i, char in enumerate(word.lower()):
+                pos = ord(char) - ord('a')
+                if 0 <= pos < 26:
+                    embedding[pos % len(embedding)] += 1
+            return embedding / (np.linalg.norm(embedding) + 1e-8)  # Normalize
+
     def calculate_distance(self, user_word, llm_word):
-        # Simple binary distance: 0 if words are the same, 1 if different
-        return 0 if user_word.lower() == llm_word.lower() else 1
+        user_embedding = self.get_word_embedding(user_word)
+        llm_embedding = self.get_word_embedding(llm_word)
+        return np.linalg.norm(user_embedding - llm_embedding)
 
     def get_llm_prediction(self, context, temperature):
         prompt = f"Given the context '{' '.join(context)}', predict the next most likely word. Return ONLY the word."
@@ -169,8 +206,8 @@ def main():
                     if result:
                         distance, llm_word = result
                         st.write(f"LLM's word: {llm_word}")
-                        st.write(f"Distance (0=Match, 1=No Match): {distance}") # Updated feedback
-                        st.write(f"Cumulative Distance: {game.cumulative_distance}") # Updated feedback
+                        st.write(f"Distance between embeddings: {distance:.4f}")
+                        st.write(f"Cumulative Distance: {game.cumulative_distance:.4f}")
 
     with col2:
         if st.button("New Game"):
