@@ -1,8 +1,6 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
-import torch
-from sentence_transformers import SentenceTransformer
 import requests
 
 class WordPredictionGame:
@@ -12,10 +10,7 @@ class WordPredictionGame:
         if not self.mistral_api_key:
             st.error("Mistral API key not found. Please set it in the Streamlit secrets.")
             st.stop()
-            
-        # Initialize embedding model
-        self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-        
+
         # Game state variables
         self.reset_game()
 
@@ -33,9 +28,9 @@ class WordPredictionGame:
                     {"role": "user", "content": "Generate a random sentence that is interesting but not too complex."}
                 ]
             }
-            
+
             response = requests.post(url, json=payload, headers=headers)
-            
+
             if response.status_code == 200:
                 result = response.json()
                 self.initial_sentence = result["choices"][0]["message"]["content"].strip().split()
@@ -47,7 +42,7 @@ class WordPredictionGame:
                 st.warning(f"Using default sentence: {default_sentence}")
                 self.initial_sentence = default_sentence.split()
                 self.current_sentence = self.initial_sentence.copy()
-                
+
         except Exception as e:
             st.error(f"Error generating initial sentence: {str(e)}")
             # Fallback to a default sentence
@@ -55,30 +50,19 @@ class WordPredictionGame:
             st.warning(f"Using default sentence: {default_sentence}")
             self.initial_sentence = default_sentence.split()
             self.current_sentence = self.initial_sentence.copy()
-            
+
         self.user_predictions = []
         self.llm_predictions = []
         self.cumulative_distance = 0
         self.game_over = False
 
-    def get_word_embedding(self, word):
-    # Very simple fallback embedding (not recommended for production)
-    # This creates a basic embedding based on character counts
-        embedding = np.zeros(50)
-        for i, char in enumerate(word.lower()):
-            pos = ord(char) - ord('a')
-            if 0 <= pos < 26:
-                embedding[pos % len(embedding)] += 1
-        return embedding / (np.linalg.norm(embedding) + 1e-8)  # Normalize
-    
     def calculate_distance(self, user_word, llm_word):
-        user_embedding = self.get_word_embedding(user_word)
-        llm_embedding = self.get_word_embedding(llm_word)
-        return np.linalg.norm(user_embedding - llm_embedding)
+        # Simple binary distance: 0 if words are the same, 1 if different
+        return 0 if user_word.lower() == llm_word.lower() else 1
 
     def get_llm_prediction(self, context, temperature):
         prompt = f"Given the context '{' '.join(context)}', predict the next most likely word. Return ONLY the word."
-        
+
         try:
             # Make direct API call to Mistral
             url = "https://api.mistral.ai/v1/chat/completions"
@@ -93,9 +77,9 @@ class WordPredictionGame:
                 ],
                 "temperature": temperature
             }
-            
+
             response = requests.post(url, json=payload, headers=headers)
-            
+
             if response.status_code == 200:
                 result = response.json()
                 return result["choices"][0]["message"]["content"].strip()
@@ -103,7 +87,7 @@ class WordPredictionGame:
                 st.error(f"Error getting LLM prediction: API returned status code {response.status_code}")
                 # Return a fallback word
                 return "the"
-                
+
         except Exception as e:
             st.error(f"Error getting LLM prediction: {str(e)}")
             # Return a fallback word
@@ -122,7 +106,7 @@ class WordPredictionGame:
 
         # Get LLM prediction
         llm_word = self.get_llm_prediction(self.current_sentence, temperature)
-        
+
         # Calculate distance
         distance = self.calculate_distance(user_word, llm_word)
         self.cumulative_distance += distance
@@ -143,7 +127,7 @@ class WordPredictionGame:
 def main():
     st.title("Word Prediction Challenge 🎲")
     st.write("Play a word prediction game with an AI!")
-    
+
     # Check if Mistral API key is set
     if not st.secrets.get("MISTRAL_API_KEY"):
         st.error("Mistral API key not found. Please add it to your Streamlit secrets.")
@@ -153,7 +137,7 @@ def main():
         MISTRAL_API_KEY = "your_api_key_here"
         """)
         st.stop()
-    
+
     # Initialize game if not already initialized
     if 'game' not in st.session_state:
         with st.spinner("Initializing game..."):
@@ -168,14 +152,14 @@ def main():
     # Game configuration
     st.sidebar.header("Game Settings")
     temperature = st.sidebar.slider("LLM Creativity", 0.0, 1.0, 0.5, 0.1)
-    
+
     # Display initial context
     st.write("### Initial Sentence:")
     st.write(" ".join(game.current_sentence))
 
     # User input
     user_word = st.text_input("Enter your predicted word:")
-    
+
     col1, col2 = st.columns(2)
     with col1:
         if st.button("Submit Word"):
@@ -185,8 +169,8 @@ def main():
                     if result:
                         distance, llm_word = result
                         st.write(f"LLM's word: {llm_word}")
-                        st.write(f"Distance between embeddings: {distance:.4f}")
-                        st.write(f"Cumulative Distance: {game.cumulative_distance:.4f}")
+                        st.write(f"Distance (0=Match, 1=No Match): {distance}") # Updated feedback
+                        st.write(f"Cumulative Distance: {game.cumulative_distance}") # Updated feedback
 
     with col2:
         if st.button("New Game"):
@@ -211,7 +195,7 @@ class MistralClientLibrary:
             # Import here to avoid errors if not used
             from mistralai.client import MistralClient
             from mistralai.models.chat_completion import ChatMessage
-            
+
             self.client = MistralClient(api_key=api_key)
             self.ChatMessage = ChatMessage
             self.use_library = True
@@ -219,7 +203,7 @@ class MistralClientLibrary:
             st.warning(f"Failed to initialize Mistral client library: {str(e)}")
             st.warning("Falling back to direct API calls.")
             self.use_library = False
-    
+
     def chat(self, model, messages, temperature=0.7):
         if self.use_library:
             try:
@@ -229,7 +213,7 @@ class MistralClientLibrary:
             except Exception as e:
                 st.warning(f"Error using Mistral client library: {str(e)}. Falling back to direct API calls.")
                 self.use_library = False
-        
+
         # Fallback to direct API call
         if not self.use_library:
             url = "https://api.mistral.ai/v1/chat/completions"
@@ -242,9 +226,9 @@ class MistralClientLibrary:
                 "messages": messages,
                 "temperature": temperature
             }
-            
+
             response = requests.post(url, json=payload, headers=headers)
-            
+
             if response.status_code == 200:
                 return response.json()
             else:
