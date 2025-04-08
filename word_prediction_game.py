@@ -62,8 +62,15 @@ class WordPredictionGame:
         self.game_over = False
 
     def get_word_embedding(self, word):
-        return self.embedding_model.encode([word])[0]
-
+    # Very simple fallback embedding (not recommended for production)
+    # This creates a basic embedding based on character counts
+    embedding = np.zeros(50)
+    for i, char in enumerate(word.lower()):
+        pos = ord(char) - ord('a')
+        if 0 <= pos < 26:
+            embedding[pos % len(embedding)] += 1
+    return embedding / (np.linalg.norm(embedding) + 1e-8)  # Normalize
+    
     def calculate_distance(self, user_word, llm_word):
         user_embedding = self.get_word_embedding(user_word)
         llm_embedding = self.get_word_embedding(llm_word)
