@@ -3,18 +3,17 @@ import numpy as np
 import pandas as pd
 import torch
 from sentence_transformers import SentenceTransformer
-from mistralai.client import MistralClient
-from mistralai.models.chat_completion import ChatMessage
+import requests
 
 class WordPredictionGame:
     def __init__(self):
-        # Initialize Mistral client and embedding model
+        # Initialize Mistral API key
         self.mistral_api_key = st.secrets.get("MISTRAL_API_KEY", "")
         if not self.mistral_api_key:
             st.error("Mistral API key not found. Please set it in the Streamlit secrets.")
             st.stop()
             
-        self.mistral_client = MistralClient(api_key=self.mistral_api_key)
+        # Initialize embedding model
         self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
         
         # Game state variables
@@ -22,17 +21,33 @@ class WordPredictionGame:
 
     def reset_game(self):
         try:
-            # Generate initial sentence from Mistral
-            messages = [
-                ChatMessage(role="user", content="Generate a random sentence that is interesting but not too complex.")
-            ]
+            # Generate initial sentence from Mistral using direct API call
+            url = "https://api.mistral.ai/v1/chat/completions"
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.mistral_api_key}"
+            }
+            payload = {
+                "model": "mistral-small-latest",  # Use the latest version
+                "messages": [
+                    {"role": "user", "content": "Generate a random sentence that is interesting but not too complex."}
+                ]
+            }
             
-            initial_response = self.mistral_client.chat(
-                model="mistral-small",
-                messages=messages
-            )
-            self.initial_sentence = initial_response.choices[0].message.content.strip().split()
-            self.current_sentence = self.initial_sentence.copy()
+            response = requests.post(url, json=payload, headers=headers)
+            
+            if response.status_code == 200:
+                result = response.json()
+                self.initial_sentence = result["choices"][0]["message"]["content"].strip().split()
+                self.current_sentence = self.initial_sentence.copy()
+            else:
+                st.error(f"Error generating initial sentence: API returned status code {response.status_code}")
+                # Fallback to a default sentence
+                default_sentence = "The curious cat watched the birds outside."
+                st.warning(f"Using default sentence: {default_sentence}")
+                self.initial_sentence = default_sentence.split()
+                self.current_sentence = self.initial_sentence.copy()
+                
         except Exception as e:
             st.error(f"Error generating initial sentence: {str(e)}")
             # Fallback to a default sentence
@@ -58,17 +73,30 @@ class WordPredictionGame:
         prompt = f"Given the context '{' '.join(context)}', predict the next most likely word. Return ONLY the word."
         
         try:
-            messages = [
-                ChatMessage(role="user", content=prompt)
-            ]
+            # Make direct API call to Mistral
+            url = "https://api.mistral.ai/v1/chat/completions"
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.mistral_api_key}"
+            }
+            payload = {
+                "model": "mistral-small-latest",  # Use the latest version
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": temperature
+            }
             
-            response = self.mistral_client.chat(
-                model="mistral-small",
-                messages=messages,
-                temperature=temperature
-            )
+            response = requests.post(url, json=payload, headers=headers)
             
-            return response.choices[0].message.content.strip()
+            if response.status_code == 200:
+                result = response.json()
+                return result["choices"][0]["message"]["content"].strip()
+            else:
+                st.error(f"Error getting LLM prediction: API returned status code {response.status_code}")
+                # Return a fallback word
+                return "the"
+                
         except Exception as e:
             st.error(f"Error getting LLM prediction: {str(e)}")
             # Return a fallback word
@@ -167,6 +195,53 @@ def main():
             'LLM Predictions': game.llm_predictions
         })
         st.dataframe(history_df)
+
+# Alternative Client Library Implementation
+# This is kept for reference but not used in the main code
+class MistralClientLibrary:
+    def __init__(self, api_key):
+        try:
+            # Import here to avoid errors if not used
+            from mistralai.client import MistralClient
+            from mistralai.models.chat_completion import ChatMessage
+            
+            self.client = MistralClient(api_key=api_key)
+            self.ChatMessage = ChatMessage
+            self.use_library = True
+        except Exception as e:
+            st.warning(f"Failed to initialize Mistral client library: {str(e)}")
+            st.warning("Falling back to direct API calls.")
+            self.use_library = False
+    
+    def chat(self, model, messages, temperature=0.7):
+        if self.use_library:
+            try:
+                # Convert to ChatMessage format
+                chat_messages = [self.ChatMessage(role=msg["role"], content=msg["content"]) for msg in messages]
+                return self.client.chat(model=model, messages=chat_messages, temperature=temperature)
+            except Exception as e:
+                st.warning(f"Error using Mistral client library: {str(e)}. Falling back to direct API calls.")
+                self.use_library = False
+        
+        # Fallback to direct API call
+        if not self.use_library:
+            url = "https://api.mistral.ai/v1/chat/completions"
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}"
+            }
+            payload = {
+                "model": model,
+                "messages": messages,
+                "temperature": temperature
+            }
+            
+            response = requests.post(url, json=payload, headers=headers)
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                raise Exception(f"API Error: {response.status_code} - {response.text}")
 
 if __name__ == "__main__":
     main()
