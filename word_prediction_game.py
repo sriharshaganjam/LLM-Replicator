@@ -64,8 +64,8 @@ class WordPredictionGame:
     def get_word_embedding(self, word):
     # Very simple fallback embedding (not recommended for production)
     # This creates a basic embedding based on character counts
-    embedding = np.zeros(50)
-    for i, char in enumerate(word.lower()):
+        embedding = np.zeros(50)
+        for i, char in enumerate(word.lower()):
         pos = ord(char) - ord('a')
         if 0 <= pos < 26:
             embedding[pos % len(embedding)] += 1
