@@ -1,14 +1,19 @@
 import streamlit as st
 import numpy as np
+import pandas as pd
 import torch
 from sentence_transformers import SentenceTransformer
 from mistralai.client import MistralClient
-from mistralai.models.chat_completion import ChatMessage
+from mistralai.models.messages import Message
 
 class WordPredictionGame:
     def __init__(self):
         # Initialize Mistral client and embedding model
-        self.mistral_api_key = st.secrets.get("MISTRAL_API_KEY")
+        self.mistral_api_key = st.secrets.get("MISTRAL_API_KEY", "")
+        if not self.mistral_api_key:
+            st.error("Mistral API key not found. Please set it in the Streamlit secrets.")
+            st.stop()
+            
         self.mistral_client = MistralClient(api_key=self.mistral_api_key)
         self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
         
@@ -18,12 +23,12 @@ class WordPredictionGame:
     def reset_game(self):
         # Generate initial sentence from Mistral
         initial_response = self.mistral_client.chat(
-            model="mistral-small-latest",
+            model="mistral-small",
             messages=[
-                ChatMessage(role="user", content="Generate a random sentence that is interesting but not too complex.")
+                Message(role="user", content="Generate a random sentence that is interesting but not too complex.")
             ]
         )
-        self.initial_sentence = initial_response.choices[0].message.content.split()
+        self.initial_sentence = initial_response.choices[0].message.content.strip().split()
         self.current_sentence = self.initial_sentence.copy()
         self.user_predictions = []
         self.llm_predictions = []
@@ -42,9 +47,9 @@ class WordPredictionGame:
         prompt = f"Given the context '{' '.join(context)}', predict the next most likely word. Return ONLY the word."
         
         response = self.mistral_client.chat(
-            model="mistral-small-latest",
+            model="mistral-small",
             messages=[
-                ChatMessage(role="user", content=prompt)
+                Message(role="user", content=prompt)
             ],
             temperature=temperature
         )
@@ -117,12 +122,13 @@ def main():
             st.experimental_rerun()
 
     # Prediction History
-    st.header("Prediction History")
-    history_df = pd.DataFrame({
-        'User Predictions': game.user_predictions,
-        'LLM Predictions': game.llm_predictions
-    })
-    st.dataframe(history_df)
+    if game.user_predictions:
+        st.header("Prediction History")
+        history_df = pd.DataFrame({
+            'User Predictions': game.user_predictions,
+            'LLM Predictions': game.llm_predictions
+        })
+        st.dataframe(history_df)
 
 if __name__ == "__main__":
     main()
