@@ -3,9 +3,8 @@ import numpy as np
 import pandas as pd
 import torch
 from sentence_transformers import SentenceTransformer
-import mistralai
-from mistralai.async_client import MistralAsyncClient
 from mistralai.client import MistralClient
+from mistralai.models.chat_completion import ChatMessage
 
 class WordPredictionGame:
     def __init__(self):
@@ -15,18 +14,7 @@ class WordPredictionGame:
             st.error("Mistral API key not found. Please set it in the Streamlit secrets.")
             st.stop()
             
-        # Create Mistral client with the latest API
-        try:
-            self.mistral_client = MistralClient(
-                api_key=self.mistral_api_key,
-                endpoint="https://api.mistral.ai/v1"
-            )
-        except Exception as e:
-            st.error(f"Failed to initialize Mistral client: {str(e)}")
-            st.error("Please check if you're using the latest version of the Mistral API library.")
-            st.info("You may need to run: pip install --upgrade mistralai")
-            st.stop()
-            
+        self.mistral_client = MistralClient(api_key=self.mistral_api_key)
         self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
         
         # Game state variables
@@ -38,7 +26,7 @@ class WordPredictionGame:
             initial_response = self.mistral_client.chat(
                 model="mistral-small",
                 messages=[
-                    {"role": "user", "content": "Generate a random sentence that is interesting but not too complex."}
+                    ChatMessage(role="user", content="Generate a random sentence that is interesting but not too complex.")
                 ]
             )
             self.initial_sentence = initial_response.choices[0].message.content.strip().split()
@@ -71,7 +59,7 @@ class WordPredictionGame:
             response = self.mistral_client.chat(
                 model="mistral-small",
                 messages=[
-                    {"role": "user", "content": prompt}
+                    ChatMessage(role="user", content=prompt)
                 ],
                 temperature=temperature
             )
@@ -86,12 +74,12 @@ class WordPredictionGame:
         # Check if game is already over
         if self.game_over:
             st.warning("Game is already over. Please start a new game.")
-            return
+            return None, None
 
         # Validate user input
         if not user_word or not user_word.strip():
             st.error("Please enter a valid word.")
-            return
+            return None, None
 
         # Get LLM prediction
         llm_word = self.get_llm_prediction(self.current_sentence, temperature)
@@ -116,9 +104,6 @@ class WordPredictionGame:
 def main():
     st.title("Word Prediction Challenge 🎲")
     st.write("Play a word prediction game with an AI!")
-    
-    # Display version info
-    st.sidebar.info(f"Mistral AI Version: {mistralai.__version__}")
     
     # Check if Mistral API key is set
     if not st.secrets.get("MISTRAL_API_KEY"):
@@ -157,10 +142,12 @@ def main():
         if st.button("Submit Word"):
             if user_word:
                 with st.spinner("Getting AI prediction..."):
-                    distance, llm_word = game.play_round(user_word, temperature)
-                    st.write(f"LLM's word: {llm_word}")
-                    st.write(f"Distance between embeddings: {distance:.4f}")
-                    st.write(f"Cumulative Distance: {game.cumulative_distance:.4f}")
+                    result = game.play_round(user_word, temperature)
+                    if result:
+                        distance, llm_word = result
+                        st.write(f"LLM's word: {llm_word}")
+                        st.write(f"Distance between embeddings: {distance:.4f}")
+                        st.write(f"Cumulative Distance: {game.cumulative_distance:.4f}")
 
     with col2:
         if st.button("New Game"):
