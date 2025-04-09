@@ -38,8 +38,8 @@ class WordPredictionGame:
     def _generate_initial_sentence(self):
         # List of different prompt templates to get more variety
         prompt_templates = [
-            "Generate a coherent, interesting sentence about {topic} with exactly {length} words. The sentence must be grammatically correct and meaningful.",
-            "Write a clear, complete sentence about {topic} using exactly {length} words. Make it compelling and varied.",
+            "Generate a short interesting sentence about {topic} with around {length} words. The sentence must be grammatically correct and meaningful.",
+            "Write a clear, complete sentence about {topic} using around {length} words. Make it compelling and varied.",
             "Create a {length}-word sentence about {topic}. Ensure it's grammatically correct and interesting."
         ]
         
@@ -120,7 +120,7 @@ class WordPredictionGame:
         # Check if context already has words and use a more specific prompt
         if context:
             context_text = ' '.join(context)
-            prompt = f"Complete this sentence by adding the next word after '{context_text}'. Provide exactly ONE word that would naturally follow in this context. The word should make grammatical sense and help form a coherent sentence."
+            prompt = f"Complete this sentence by adding one word after '{context_text}'. Provide exactly ONE word that would naturally follow in this context. The word should make grammatical sense and help form a coherent sentence."
         else:
             prompt = "Provide a single word to start a sentence."
             
