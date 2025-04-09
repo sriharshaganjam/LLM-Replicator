@@ -161,7 +161,8 @@ def main():
                 st.stop()
 
     game = st.session_state.game
-    llm_starts = game.llm_starts
+    llm_starts = game.llm_starts  # Access llm_starts AFTER game is initialized
+
     remaining_words = sentence_length - len(game.user_predictions) - len(game.llm_predictions)
 
     st.write("### Initial Sentence:")
