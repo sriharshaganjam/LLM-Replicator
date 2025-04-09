@@ -4,16 +4,14 @@ import pandas as pd
 import torch
 from sentence_transformers import SentenceTransformer
 import requests
+import random  # For more diverse sentence generation
 
 class WordPredictionGame:
-    def __init__(self, initial_sentence_option, user_provided_sentence):
+    def __init__(self, sentence_length):
         self.mistral_api_key = st.secrets.get("MISTRAL_API_KEY", "")
         if not self.mistral_api_key:
             st.error("Mistral API key not found. Please set it in the Streamlit secrets.")
             st.stop()
-
-        self.initial_sentence_option = initial_sentence_option
-        self.user_provided_sentence = user_provided_sentence
 
         # Initialize embedding model (check if it's already in session state)
         if 'embedding_model' not in st.session_state:
@@ -26,54 +24,62 @@ class WordPredictionGame:
                 st.session_state.embedding_model = None
 
         self.embedding_model = st.session_state.embedding_model
-
+        self.sentence_length = sentence_length
         self.reset_game()
 
     def reset_game(self):
-        if self.initial_sentence_option == "Enter your own sentence" and self.user_provided_sentence:
-            self.initial_sentence = self.user_provided_sentence.strip().split()
-            self.current_sentence = self.initial_sentence.copy()
-        else:
-            try:
-                # Generate initial sentence from Mistral using direct API call
-                url = "https://api.mistral.ai/v1/chat/completions"
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {self.mistral_api_key}"
-                }
-                payload = {
-                    "model": "mistral-small-latest",  # Use the latest version
-                    "messages": [
-                        {"role": "user", "content": "Generate a random sentence that is interesting but not too complex."}
-                    ]
-                }
-
-                response = requests.post(url, json=payload, headers=headers)
-
-                if response.status_code == 200:
-                    result = response.json()
-                    self.initial_sentence = result["choices"][0]["message"]["content"].strip().split()
-                    self.current_sentence = self.initial_sentence.copy()
-                else:
-                    st.error(f"Error generating initial sentence: API returned status code {response.status_code}")
-                    # Fallback to a default sentence
-                    default_sentence = "The curious cat watched the birds outside."
-                    st.warning(f"Using default sentence: {default_sentence}")
-                    self.initial_sentence = default_sentence.split()
-                    self.current_sentence = self.initial_sentence.copy()
-
-            except Exception as e:
-                st.error(f"Error generating initial sentence: {str(e)}")
-                # Fallback to a default sentence
-                default_sentence = "The curious cat watched the birds outside."
-                st.warning(f"Using default sentence: {default_sentence}")
-                self.initial_sentence = default_sentence.split()
-                self.current_sentence = self.initial_sentence.copy()
-
+        self.initial_sentence = self._generate_initial_sentence(self.sentence_length)
+        self.current_sentence_display = self.initial_sentence[:self._get_llm_starts(self.sentence_length)].copy()
         self.user_predictions = []
         self.llm_predictions = []
         self.cumulative_distance = 0
         self.game_over = False
+
+    def _get_llm_starts(self, length):
+        """Determines how many initial words the LLM provides based on sentence length."""
+        if length == 7:
+            return 3
+        elif length == 10:
+            return 4
+        elif length == 13:
+            return 5
+        return 3  # Default
+
+    def _generate_initial_sentence(self, length):
+        """Generates a random initial sentence of the specified length using Mistral."""
+        num_initial_words = self._get_llm_starts(length)
+        prompt = f"Generate a random and diverse sentence of exactly {length} words."
+
+        try:
+            url = "https://api.mistral.ai/v1/chat/completions"
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.mistral_api_key}"
+            }
+            payload = {
+                "model": "mistral-small-latest",
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ]
+            }
+
+            response = requests.post(url, json=payload, headers=headers)
+
+            if response.status_code == 200:
+                result = response.json()
+                sentence = result["choices"][0]["message"]["content"].strip().split()
+                if len(sentence) == length:
+                    return sentence
+                else:
+                    st.warning(f"Generated sentence has {len(sentence)} words, expected {length}. Trying again.")
+                    return self._generate_initial_sentence(length) # Recursive call for correct length
+            else:
+                st.error(f"Error generating initial sentence: API returned status code {response.status_code}")
+                return ["The", "quick", "brown", "fox", "jumps", "over", "the", "lazy", "dog", "."][:length] # Fallback
+
+        except Exception as e:
+            st.error(f"Error generating initial sentence: {str(e)}")
+            return ["The", "quick", "brown", "fox", "jumps", "over", "the", "lazy", "dog", "."][:length] # Fallback
 
     def get_word_embedding(self, word):
         if self.embedding_model:
@@ -87,20 +93,19 @@ class WordPredictionGame:
                     pos = ord(char) - ord('a')
                     if 0 <= pos < 26:
                         embedding[pos % len(embedding)] += 1
-                return embedding / (np.linalg.norm(embedding) + 1e-8)  # Normalize
+                return embedding / (np.linalg.norm(embedding) + 1e-8)
         else:
-            st.info("Using basic character-based embedding.")  # Add this line for explicit confirmation
+            st.info("Using basic character-based embedding.")
             embedding = np.zeros(50)
             for i, char in enumerate(word.lower()):
                 pos = ord(char) - ord('a')
                 if 0 <= pos < 26:
                     embedding[pos % len(embedding)] += 1
-            return embedding / (np.linalg.norm(embedding) + 1e-8)  # Normalize
+            return embedding / (np.linalg.norm(embedding) + 1e-8)
 
     def calculate_distance(self, user_word, llm_word):
         if self.embedding_model is None:
-            st.error("Embedding model is None in calculate_distance!")  # Debugging line
-            # Fallback to a very basic distance if the model is not loaded
+            st.error("Embedding model is None in calculate_distance!")
             return 1 if user_word.lower() != llm_word.lower() else 0
         user_embedding = self.get_word_embedding(user_word)
         llm_embedding = self.get_word_embedding(llm_word)
@@ -110,14 +115,13 @@ class WordPredictionGame:
         prompt = f"Given the context '{' '.join(context)}', predict the next most likely word. Return ONLY the word."
 
         try:
-            # Make direct API call to Mistral
             url = "https://api.mistral.ai/v1/chat/completions"
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.mistral_api_key}"
             }
             payload = {
-                "model": "mistral-small-latest",  # Use the latest version
+                "model": "mistral-small-latest",
                 "messages": [
                     {"role": "user", "content": prompt}
                 ],
@@ -131,78 +135,66 @@ class WordPredictionGame:
                 return result["choices"][0]["message"]["content"].strip()
             else:
                 st.error(f"Error getting LLM prediction: API returned status code {response.status_code}")
-                # Return a fallback word
                 return "the"
 
         except Exception as e:
             st.error(f"Error getting LLM prediction: {str(e)}")
-            # Return a fallback word
             return "the"
 
     def play_round(self, user_word, temperature):
-        # Check if game is already over
         if self.game_over:
             st.warning("Game is already over. Please start a new game.")
             return None, None
 
-        # Validate user input
         if not user_word or not user_word.strip():
             st.error("Please enter a valid word.")
             return None, None
 
-        # Get LLM prediction
-        llm_word = self.get_llm_prediction(self.current_sentence, temperature)
+        llm_starts = self._get_llm_starts(self.sentence_length)
+        if len(self.user_predictions) + len(self.llm_predictions) >= (self.sentence_length - llm_starts):
+            st.info("Sentence prediction complete!")
+            self.game_over = True
+            return None, None
 
-        # Calculate distance
+        context = self.initial_sentence[:llm_starts + len(self.user_predictions) + len(self.llm_predictions)]
+        llm_word = self.get_llm_prediction(context, temperature)
         distance = self.calculate_distance(user_word, llm_word)
         self.cumulative_distance += distance
 
-        # Update prediction history
         self.user_predictions.append(user_word)
         self.llm_predictions.append(llm_word)
+        self.current_sentence_display.append(user_word)
+        self.current_sentence_display.append(llm_word)
 
-        # Check for game end (full stop)
-        if '.' in llm_word or '.' in user_word:
+        if len(self.current_sentence_display) == self.sentence_length:
             self.game_over = True
-            st.success("Game Over!")
+            st.success("Sentence prediction complete!")
 
         return distance, llm_word
 
 def main():
     st.title("Word Prediction Challenge 🎲")
-    st.write("Play a word prediction game with an AI!")
+    st.write("Predict the next words in a sentence!")
 
-    # Option to choose initial sentence source
-    initial_sentence_option = st.radio(
-        "Choose the source for the initial sentence:",
-        ("Generate a random sentence (AI)", "Enter your own sentence"),
-        index=0,  # Default to AI generation
-        help="Select whether the AI should generate the first sentence or if you'd like to provide it."
+    # Sentence length selection slider
+    sentence_length = st.sidebar.slider(
+        "Sentence Length",
+        min_value=7,
+        max_value=13,
+        value=7,
+        step=3,
+        help="Choose the desired length of the sentence (7, 10, or 13 words)."
     )
 
-    user_provided_sentence = ""
-    if initial_sentence_option == "Enter your own sentence":
-        user_provided_sentence = st.text_input("Enter your starting sentence:",
-                                               placeholder="e.g., The old house stood on a hill.",
-                                               key="user_initial_sentence")
-
-    # Initialize game in session state if not present
-    if 'game' not in st.session_state:
+    # Initialize game based on selected sentence length
+    if 'game' not in st.session_state or st.session_state.get('sentence_length') != sentence_length:
         with st.spinner("Initializing game..."):
             try:
-                st.session_state.game = WordPredictionGame(initial_sentence_option, user_provided_sentence)
+                st.session_state.game = WordPredictionGame(sentence_length)
+                st.session_state['sentence_length'] = sentence_length
             except Exception as e:
                 st.error(f"Failed to initialize game: {str(e)}")
                 st.stop()
-    else:
-        # Update initial sentence parameters if they have changed
-        if st.session_state.get('initial_sentence_option') != initial_sentence_option or (initial_sentence_option == "Enter your own sentence" and st.session_state.get('user_provided_sentence') != user_provided_sentence):
-            st.session_state.game.initial_sentence_option = initial_sentence_option
-            st.session_state.game.user_provided_sentence = user_provided_sentence
-            st.session_state.game.reset_game()
-            st.session_state['initial_sentence_option'] = initial_sentence_option
-            st.session_state['user_provided_sentence'] = user_provided_sentence
-            st.experimental_rerun() # Force a rerun to reflect the new initial sentence
 
     game = st.session_state.game
 
@@ -218,7 +210,7 @@ def main():
 
     # Display initial context
     st.write("### Current Sentence:")
-    st.write(" ".join(game.current_sentence))
+    st.write(" ".join(game.current_sentence_display))
 
     # User input
     user_word = st.text_input("Enter your predicted word:")
@@ -226,7 +218,7 @@ def main():
     col1, col2 = st.columns(2)
     with col1:
         if st.button("Submit Word"):
-            if user_word:
+            if user_word and not game.game_over:
                 with st.spinner("Getting AI prediction..."):
                     result = game.play_round(user_word, temperature)
                     if result:
@@ -234,11 +226,14 @@ def main():
                         st.write(f"LLM's word: {llm_word}")
                         st.write(f"Distance between embeddings: {distance:.4f}")
                         st.write(f"Cumulative Distance: {game.cumulative_distance:.4f}")
+                        st.experimental_rerun() # Rerun to update the displayed sentence
+            elif game.game_over:
+                st.info("Game over. Start a new game.")
 
     with col2:
         if st.button("New Game"):
             with st.spinner("Starting new game..."):
-                game.reset_game()
+                st.session_state.pop('game', None) # Force re-initialization
                 st.experimental_rerun()
 
     # Prediction History - Horizontal Table
@@ -252,8 +247,8 @@ def main():
         st.table(history_df)
 
     # Addressing LLM Repetition
-    st.subheader("Regarding Repetitive Predictions:")
-    st.info("The language model sometimes repeats words, especially at lower creativity levels or when it lacks strong contextual cues. Increasing the 'LLM Creativity' slider might introduce more varied predictions. However, very high creativity can lead to less coherent sentences. It's a balance!")
+    st.subheader("Regarding LLM Predictions:")
+    st.info("The language model's predictions can sometimes be repetitive. Adjusting the 'LLM Creativity' slider might introduce more variety.")
 
 if __name__ == "__main__":
     main()
