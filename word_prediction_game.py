@@ -221,19 +221,14 @@ def main():
                 game.reset_game()
                 st.experimental_rerun()
 
-    # Prediction History - Horizontal Table
+    # Prediction History - Horizontal Table (Corrected)
     if game.user_predictions:
         st.header("Prediction History")
-        user_preds = ["You"] + game.user_predictions
-        llm_preds = ["AI"] + game.llm_predictions
-
-        # Ensure both lists have the same length for the table
-        max_len = max(len(user_preds), len(llm_preds))
-        user_preds.extend([""] * (max_len - len(user_preds)))
-        llm_preds.extend([""] * (max_len - len(llm_preds)))
-
-        history_data = {"": list(range(max_len)), "Your Prediction": user_preds, "AI Prediction": llm_preds}
-        history_df = pd.DataFrame(history_data).set_index("")
+        history_data = {
+            "Your Prediction": game.user_predictions,
+            "AI Prediction": game.llm_predictions,
+        }
+        history_df = pd.DataFrame(history_data).T  # Transpose the DataFrame for horizontal layout
         st.table(history_df)
 
     # Addressing LLM Repetition
