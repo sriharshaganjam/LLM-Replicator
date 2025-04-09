@@ -159,8 +159,10 @@ def main():
         "AI Predictions": [" ".join(game.initial_sentence[:llm_starts])] + game.llm_predictions + ["_"] * (remaining_words if remaining_words > 0 else 0),
     }
 
-    predictions_df = pd.DataFrame(prediction_data).iloc[[0] + list(range(1, len(prediction_data["Your Predictions"])))].T
-    predictions_df.columns = ["Initial Words"] + [f"Prediction {i+1}" for i in range(remaining_words + len(game.user_predictions))]
+    predictions_df = pd.DataFrame(prediction_data).T
+    num_predictions = max(len(game.user_predictions), len(game.llm_predictions))
+    columns = ["Type", "Initial Words"] + [f"Prediction {i+1}" for i in range(num_predictions)]
+    predictions_df.columns = columns[:predictions_df.shape[1]]
     st.table(predictions_df)
 
     st.write(f"Cumulative Embedding Distance: {game.cumulative_distance:.4f}")
@@ -171,10 +173,14 @@ def main():
     with col1:
         if st.button("Predict") and not game.game_over:
             if user_word:
-                with st.spinner("Getting AI prediction..."):
-                    distance, llm_word = game.play_round(user_word)
-                    if distance is not None:
-                        st.experimental_rerun()
+                user_words = user_word.strip().split()
+                if len(user_words) == 1:
+                    with st.spinner("Getting AI prediction..."):
+                        distance, llm_word = game.play_round(user_word)
+                        if distance is not None:
+                            st.experimental_rerun()
+                else:
+                    st.error("Please enter only one word for your prediction.")
             elif not user_word and not game.game_over:
                 st.warning("Please enter a word.")
         elif game.game_over:
