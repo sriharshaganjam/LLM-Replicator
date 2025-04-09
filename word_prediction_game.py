@@ -36,7 +36,24 @@ class WordPredictionGame:
         self.game_over = False
 
     def _generate_initial_sentence(self):
-        prompt = f"Generate a random and diverse sentence of no more than 10 words."
+        # List of different prompt templates to get more variety
+        prompt_templates = [
+            "Generate a coherent, interesting sentence about {topic} with exactly {length} words. The sentence must be grammatically correct and meaningful.",
+            "Write a clear, complete sentence about {topic} using exactly {length} words. Make it compelling and varied.",
+            "Create a {length}-word sentence about {topic}. Ensure it's grammatically correct and interesting."
+        ]
+        
+        topics = [
+            "nature", "technology", "history", "food", "travel", 
+            "science", "art", "sports", "music", "literature",
+            "ocean", "mountains", "cities", "animals", "weather"
+        ]
+        
+        # Generate a random sentence length between 5 and 10 words
+        length = random.randint(5, 10)
+        topic = random.choice(topics)
+        prompt = random.choice(prompt_templates).format(topic=topic, length=length)
+        
         max_retries = 3
         delay_seconds = 2
 
@@ -44,12 +61,23 @@ class WordPredictionGame:
             try:
                 url = "https://api.mistral.ai/v1/chat/completions"
                 headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.mistral_api_key}"}
-                payload = {"model": "mistral-small-latest", "messages": [{"role": "user", "content": prompt}]}
+                payload = {
+                    "model": "mistral-small-latest", 
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.7,  # Add some randomness but not too much
+                    "max_tokens": 30
+                }
                 response = requests.post(url, json=payload, headers=headers)
                 if response.status_code == 200:
-                    sentence = response.json()["choices"][0]["message"]["content"].strip().split()
-                    if 1 <= len(sentence) <= 10:
+                    sentence_text = response.json()["choices"][0]["message"]["content"].strip()
+                    # Clean up the sentence - remove periods, quotation marks, etc.
+                    sentence_text = sentence_text.replace('"', '').replace("'", "").strip(".")
+                    sentence = sentence_text.split()
+                    
+                    # Verify we have a good sentence of appropriate length
+                    if 4 <= len(sentence) <= 10 and len(set(sentence)) == len(sentence):  # No repeated words
                         return sentence
+                    
                 elif response.status_code == 429:
                     st.error(f"API rate limit hit.")
                     time.sleep(delay_seconds * (attempt + 1))
@@ -61,8 +89,15 @@ class WordPredictionGame:
             if attempt < max_retries - 1:
                 time.sleep(delay_seconds)
 
-        st.error("Failed to generate an initial sentence.")
-        return ["The", "quick", "brown"]
+        # Fallback sentences if API fails
+        fallback_sentences = [
+            "The quick brown fox jumps over".split(),
+            "Scientists discovered a new species yesterday".split(),
+            "Ancient civilizations built impressive stone monuments".split(),
+            "Technology continues to evolve at unprecedented".split(),
+            "The mountain climbers reached the summit".split()
+        ]
+        return random.choice(fallback_sentences)
 
     def get_word_embedding(self, word):
         if self.embedding_model:
@@ -82,20 +117,52 @@ class WordPredictionGame:
         return np.linalg.norm(user_embedding - llm_embedding)
 
     def get_llm_prediction(self, context):
-        prompt = f"Given the incomplete sentence '{' '.join(context)}', predict one word that is most likely to follow. Return ONLY that single word."
+        # Check if context already has words and use a more specific prompt
+        if context:
+            context_text = ' '.join(context)
+            prompt = f"Complete this sentence by adding the next word after '{context_text}'. Provide exactly ONE word that would naturally follow in this context. The word should make grammatical sense and help form a coherent sentence."
+        else:
+            prompt = "Provide a single word to start a sentence."
+            
         try:
             url = "https://api.mistral.ai/v1/chat/completions"
             headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.mistral_api_key}"}
-            payload = {"model": "mistral-small-latest", "messages": [{"role": "user", "content": prompt}]}
+            payload = {
+                "model": "mistral-small-latest", 
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.4,  # Lower temperature for more predictable responses
+                "max_tokens": 5  # Limit tokens to avoid getting more than one word
+            }
             response = requests.post(url, json=payload, headers=headers)
             if response.status_code == 200:
-                return response.json()["choices"][0]["message"]["content"].strip()
+                # Extract just the first word from the response
+                prediction = response.json()["choices"][0]["message"]["content"].strip()
+                prediction = prediction.split()[0].strip(".,!?;:")  # Get first word and remove punctuation
+                
+                # Check if the predicted word is already in the context to avoid repetition
+                if prediction.lower() in [w.lower() for w in context]:
+                    # If there's repetition, ask for an alternative
+                    alt_prompt = f"Provide a different single word (not '{prediction}') that could follow '{context_text}' in a sentence."
+                    alt_payload = {
+                        "model": "mistral-small-latest", 
+                        "messages": [{"role": "user", "content": alt_prompt}],
+                        "temperature": 0.7,  # Higher temperature for more variety
+                        "max_tokens": 5
+                    }
+                    alt_response = requests.post(url, json=alt_payload, headers=headers)
+                    if alt_response.status_code == 200:
+                        prediction = alt_response.json()["choices"][0]["message"]["content"].strip().split()[0].strip(".,!?;:")
+                
+                return prediction
             else:
                 st.error(f"LLM prediction API error: {response.status_code}")
                 return ""
         except requests.exceptions.RequestException as e:
             st.error(f"LLM prediction network error: {e}")
             return ""
+        except IndexError:
+            # If there's an issue parsing the response
+            return "the"  # Safe fallback
 
     def play_round(self, user_word):
         if self.game_over:
@@ -111,8 +178,9 @@ class WordPredictionGame:
             st.info("Sentence prediction complete!")
             return None, None
 
-        context = self.initial_sentence[:self.llm_starts + len(self.user_predictions) + len(self.llm_predictions)]
+        context = self.initial_sentence[:self.llm_starts] + self.user_predictions
         llm_word = self.get_llm_prediction(context)
+        
         if llm_word:
             distance = self.calculate_distance(user_word, llm_word)
             self.cumulative_distance += distance
@@ -136,7 +204,7 @@ def main():
     game = st.session_state.game
     llm_starts = game.llm_starts
     num_words = game.num_words
-    remaining_words = num_words - len(game.user_predictions) - len(game.llm_predictions)
+    remaining_words = num_words - llm_starts - len(game.user_predictions)
 
     st.write(f"The AI has generated a sentence of **{num_words}** words. Guess the remaining **{num_words - llm_starts}** words after the first **{llm_starts}**.")
 
