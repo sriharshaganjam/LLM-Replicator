@@ -33,7 +33,6 @@ class WordPredictionGame:
         self.user_predictions = []
         self.llm_predictions = []
         self.word_distances = []  # Store individual word distances
-        self.cumulative_distance = 0
         self.sentence_distance = None  # To store full sentence distance
         self.game_over = False
         # Store the original complete sentence for better LLM prediction
@@ -250,7 +249,6 @@ Next word:"""
         
         if llm_word:
             distance = self.calculate_distance(user_word, llm_word)
-            self.cumulative_distance += distance
             self.user_predictions.append(user_word)
             self.llm_predictions.append(llm_word)
             self.word_distances.append(distance)
@@ -312,22 +310,43 @@ def main():
 
     st.write(f"The AI has generated a sentence of **{num_words}** words. Guess the remaining **{num_words - llm_starts}** words after the first **{llm_starts}**.")
 
-    st.write("### Initial Words:")
+    # Display Initial Words in blue box
+    st.markdown("""
+    <div style="background-color:#e6f2ff; padding:10px; border-radius:5px; margin-bottom:10px;">
+        <h3 style="margin-top:0;">Initial Words:</h3>
+        <p style="font-size:16px;">
+    """, unsafe_allow_html=True)
     st.write(" ".join(game.initial_sentence[:llm_starts] + ["_"] * (num_words - llm_starts)))
+    st.markdown("</p></div>", unsafe_allow_html=True)
 
     user_sentence_display = " ".join(game.initial_sentence[:llm_starts] + game.user_predictions + ["_"] * (num_words - llm_starts - len(game.user_predictions)))
     llm_sentence_display = " ".join(game.initial_sentence[:llm_starts] + game.llm_predictions + ["_"] * (num_words - llm_starts - len(game.llm_predictions)))
 
-    st.write("### Your Sentence:")
+    # Display Your Sentence in green box
+    st.markdown("""
+    <div style="background-color:#e6ffe6; padding:10px; border-radius:5px; margin-bottom:10px;">
+        <h3 style="margin-top:0;">Your Sentence:</h3>
+        <p style="font-size:16px;">
+    """, unsafe_allow_html=True)
     st.write(user_sentence_display)
-    st.write("### AI's Sentence:")
-    st.write(llm_sentence_display)
+    st.markdown("</p></div>", unsafe_allow_html=True)
 
-    st.write(f"Cumulative Word Embedding Distance: {game.cumulative_distance:.4f}")
+    # Display AI's Sentence in purple box
+    st.markdown("""
+    <div style="background-color:#f2e6ff; padding:10px; border-radius:5px; margin-bottom:15px;">
+        <h3 style="margin-top:0;">AI's Sentence:</h3>
+        <p style="font-size:16px;">
+    """, unsafe_allow_html=True)
+    st.write(llm_sentence_display)
+    st.markdown("</p></div>", unsafe_allow_html=True)
     
     # Display sentence-level distance if game is over
     if game.game_over and game.sentence_distance is not None:
-        st.write(f"Full Sentence Embedding Distance: {game.sentence_distance:.4f}")
+        st.markdown(f"""
+        <div style="background-color:#ffe6e6; padding:15px; border-radius:5px; margin:15px 0; text-align:center;">
+            <h2 style="margin:0; font-size:24px;">Sentence Embedding Distance: {game.sentence_distance:.4f}</h2>
+        </div>
+        """, unsafe_allow_html=True)
 
     user_word = st.text_input("Your next word:", max_chars=20, help="Enter one word at a time.")
 
@@ -356,10 +375,6 @@ def main():
     # Display word-level distances table
     if game.word_distances:
         st.markdown("### Word Prediction Results")
-        
-        # If game is over, show sentence distance first
-        if game.game_over and game.sentence_distance is not None:
-            st.markdown(f"**Sentence Embedding Distance:** {game.sentence_distance:.4f}")
         
         # Create table with word-level distances
         data = {
