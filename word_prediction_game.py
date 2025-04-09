@@ -82,7 +82,7 @@ class WordPredictionGame:
         return np.linalg.norm(user_embedding - llm_embedding)
 
     def get_llm_prediction(self, context):
-        prompt = f"Given the incomplete sentence '{' '.join(context)}', predict the single next word that is most likely to follow. Return ONLY that single word."
+        prompt = f"Given the incomplete sentence '{' '.join(context)}', predict one word that is most likely to follow. Return ONLY that single word."
         try:
             url = "https://api.mistral.ai/v1/chat/completions"
             headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.mistral_api_key}"}
@@ -138,7 +138,7 @@ def main():
     num_words = game.num_words
     remaining_words = num_words - len(game.user_predictions) - len(game.llm_predictions)
 
-    st.write(f"The AI has generated a sentence of **{num_words}** words. Guess the remaining **{remaining_words}** words after the first **{llm_starts}**.")
+    st.write(f"The AI has generated a sentence of **{num_words}** words. Guess the remaining **{num_words - llm_starts}** words after the first **{llm_starts}**.")
 
     st.write("### Initial Words:")
     st.write(" ".join(game.initial_sentence[:llm_starts] + ["_"] * (num_words - llm_starts)))
