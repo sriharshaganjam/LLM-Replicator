@@ -32,7 +32,9 @@ class WordPredictionGame:
         self.llm_starts = min(3, self.num_words)  # Display first 3 words
         self.user_predictions = []
         self.llm_predictions = []
+        self.word_distances = []  # Store individual word distances
         self.cumulative_distance = 0
+        self.sentence_distance = None  # To store full sentence distance
         self.game_over = False
         # Store the original complete sentence for better LLM prediction
         self.original_complete_sentence = self.initial_sentence.copy()
@@ -112,11 +114,31 @@ class WordPredictionGame:
         else:
             return np.zeros(50)
 
+    def get_sentence_embedding(self, sentence):
+        if self.embedding_model:
+            try:
+                return self.embedding_model.encode(sentence, convert_to_tensor=True).cpu().numpy()
+            except Exception as e:
+                st.error(f"Error embedding sentence: {e}")
+                return np.zeros(384)  # Default embedding size
+        else:
+            return np.zeros(384)
+
     def calculate_distance(self, user_word, llm_word):
         if self.embedding_model is None:
             return 1 if user_word.lower() != llm_word.lower() else 0
         user_embedding = self.get_word_embedding(user_word)
         llm_embedding = self.get_word_embedding(llm_word)
+        return np.linalg.norm(user_embedding - llm_embedding)
+
+    def calculate_sentence_distance(self):
+        """Calculate embedding distance between complete sentences"""
+        user_sentence = " ".join(self.initial_sentence[:self.llm_starts] + self.user_predictions)
+        llm_sentence = " ".join(self.initial_sentence[:self.llm_starts] + self.llm_predictions)
+        
+        user_embedding = self.get_sentence_embedding(user_sentence)
+        llm_embedding = self.get_sentence_embedding(llm_sentence)
+        
         return np.linalg.norm(user_embedding - llm_embedding)
 
     def get_llm_prediction(self, context):
@@ -231,8 +253,45 @@ Next word:"""
             self.cumulative_distance += distance
             self.user_predictions.append(user_word)
             self.llm_predictions.append(llm_word)
+            self.word_distances.append(distance)
+            
+            # Calculate sentence distance if this was the last word
+            if len(self.user_predictions) >= (len(self.initial_sentence) - self.llm_starts):
+                self.sentence_distance = self.calculate_sentence_distance()
+                self.game_over = True
+            
             return distance, llm_word
         return None, None
+
+def create_embedding_legend():
+    """Create a legend explaining embedding distances"""
+    st.markdown("### Understanding Embedding Distances")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### Word-Level Distance")
+        st.markdown("""
+        - **0.0 - 0.5**: Words are nearly identical in meaning
+        - **0.5 - 1.0**: Words are very similar semantically
+        - **1.0 - 1.5**: Words share related concepts
+        - **1.5 - 2.5**: Words have some semantic relationship
+        - **> 2.5**: Words have little or no semantic similarity
+        """)
+    
+    with col2:
+        st.markdown("#### Sentence-Level Distance")
+        st.markdown("""
+        - **0.0 - 1.0**: Sentences convey nearly identical meaning
+        - **1.0 - 2.0**: Sentences are semantically very similar
+        - **2.0 - 3.0**: Sentences share common topics/themes
+        - **3.0 - 5.0**: Sentences have some topical overlap
+        - **> 5.0**: Sentences discuss different topics/concepts
+        """)
+    
+    st.markdown("""
+    *Note: Lower distances indicate greater semantic similarity between your predictions and the AI's predictions.*
+    """)
 
 def main():
     st.title("Word Prediction Challenge 🎲")
@@ -264,7 +323,11 @@ def main():
     st.write("### AI's Sentence:")
     st.write(llm_sentence_display)
 
-    st.write(f"Cumulative Embedding Distance: {game.cumulative_distance:.4f}")
+    st.write(f"Cumulative Word Embedding Distance: {game.cumulative_distance:.4f}")
+    
+    # Display sentence-level distance if game is over
+    if game.game_over and game.sentence_distance is not None:
+        st.write(f"Full Sentence Embedding Distance: {game.sentence_distance:.4f}")
 
     user_word = st.text_input("Your next word:", max_chars=20, help="Enter one word at a time.")
 
@@ -289,6 +352,27 @@ def main():
         if st.button("New Game"):
             st.session_state.pop('game', None)
             st.experimental_rerun()
+    
+    # Display word-level distances table
+    if game.word_distances:
+        st.markdown("### Word Prediction Results")
+        
+        # If game is over, show sentence distance first
+        if game.game_over and game.sentence_distance is not None:
+            st.markdown(f"**Sentence Embedding Distance:** {game.sentence_distance:.4f}")
+        
+        # Create table with word-level distances
+        data = {
+            "Position": list(range(1, len(game.user_predictions) + 1)),
+            "Your Word": game.user_predictions,
+            "AI's Word": game.llm_predictions,
+            "Embedding Distance": [f"{dist:.4f}" for dist in game.word_distances]
+        }
+        df = pd.DataFrame(data)
+        st.table(df)
+    
+    # Add legend explaining embedding distances
+    create_embedding_legend()
 
 if __name__ == "__main__":
     main()
