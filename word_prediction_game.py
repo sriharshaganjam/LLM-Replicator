@@ -310,11 +310,11 @@ def main():
 
     st.write(f"The AI has generated a sentence of **{num_words}** words. Guess the remaining **{num_words - llm_starts}** words after the first **{llm_starts}**.")
 
-    # Display Initial Words in blue box
+    # Display Initial Words in blue box with dark text
     st.markdown("""
-    <div style="background-color:#e6f2ff; padding:10px; border-radius:5px; margin-bottom:10px;">
-        <h3 style="margin-top:0;">Initial Words:</h3>
-        <p style="font-size:16px;">
+    <div style="background-color:#3366cc; padding:10px; border-radius:5px; margin-bottom:10px;">
+        <h3 style="margin-top:0; color:#ffffff;">Initial Words:</h3>
+        <p style="font-size:16px; color:#ffffff;">
     """, unsafe_allow_html=True)
     st.write(" ".join(game.initial_sentence[:llm_starts] + ["_"] * (num_words - llm_starts)))
     st.markdown("</p></div>", unsafe_allow_html=True)
@@ -322,20 +322,20 @@ def main():
     user_sentence_display = " ".join(game.initial_sentence[:llm_starts] + game.user_predictions + ["_"] * (num_words - llm_starts - len(game.user_predictions)))
     llm_sentence_display = " ".join(game.initial_sentence[:llm_starts] + game.llm_predictions + ["_"] * (num_words - llm_starts - len(game.llm_predictions)))
 
-    # Display Your Sentence in green box
+    # Display Your Sentence in green box with dark text
     st.markdown("""
-    <div style="background-color:#e6ffe6; padding:10px; border-radius:5px; margin-bottom:10px;">
-        <h3 style="margin-top:0;">Your Sentence:</h3>
-        <p style="font-size:16px;">
+    <div style="background-color:#1e7d32; padding:10px; border-radius:5px; margin-bottom:10px;">
+        <h3 style="margin-top:0; color:#ffffff;">Your Sentence:</h3>
+        <p style="font-size:16px; color:#ffffff;">
     """, unsafe_allow_html=True)
     st.write(user_sentence_display)
     st.markdown("</p></div>", unsafe_allow_html=True)
 
-    # Display AI's Sentence in purple box
+    # Display AI's Sentence in purple box with dark text
     st.markdown("""
-    <div style="background-color:#f2e6ff; padding:10px; border-radius:5px; margin-bottom:15px;">
-        <h3 style="margin-top:0;">AI's Sentence:</h3>
-        <p style="font-size:16px;">
+    <div style="background-color:#6a1b9a; padding:10px; border-radius:5px; margin-bottom:15px;">
+        <h3 style="margin-top:0; color:#ffffff;">AI's Sentence:</h3>
+        <p style="font-size:16px; color:#ffffff;">
     """, unsafe_allow_html=True)
     st.write(llm_sentence_display)
     st.markdown("</p></div>", unsafe_allow_html=True)
@@ -343,8 +343,8 @@ def main():
     # Display sentence-level distance if game is over
     if game.game_over and game.sentence_distance is not None:
         st.markdown(f"""
-        <div style="background-color:#ffe6e6; padding:15px; border-radius:5px; margin:15px 0; text-align:center;">
-            <h2 style="margin:0; font-size:24px;">Sentence Embedding Distance: {game.sentence_distance:.4f}</h2>
+        <div style="background-color:#c62828; padding:15px; border-radius:5px; margin:15px 0; text-align:center;">
+            <h2 style="margin:0; font-size:24px; color:#ffffff;">Sentence Embedding Distance: {game.sentence_distance:.4f}</h2>
         </div>
         """, unsafe_allow_html=True)
 
