@@ -8,7 +8,7 @@ import random
 import time
 
 class WordPredictionGame:
-    def __init__(self, sentence_length):
+    def __init__(self):
         self.mistral_api_key = st.secrets.get("MISTRAL_API_KEY", "")
         if not self.mistral_api_key:
             st.error("Mistral API key not found. Please set it in the Streamlit secrets.")
@@ -24,28 +24,19 @@ class WordPredictionGame:
                 st.session_state.embedding_model = None
 
         self.embedding_model = st.session_state.embedding_model
-        self.sentence_length = sentence_length
         self.reset_game()
 
     def reset_game(self):
-        self.initial_sentence = self._generate_initial_sentence(self.sentence_length)
-        self.llm_starts = self._get_llm_starts(len(self.initial_sentence)) # Use actual length
+        self.initial_sentence = self._generate_initial_sentence()
+        self.num_words = len(self.initial_sentence)
+        self.llm_starts = min(3, self.num_words)  # Display first 3 words
         self.user_predictions = []
         self.llm_predictions = []
         self.cumulative_distance = 0
         self.game_over = False
 
-    def _get_llm_starts(self, length):
-        if length == 7:
-            return 3
-        elif length == 10:
-            return 4
-        elif length == 13:
-            return 5
-        return max(1, length - 4) # Adjust for shorter sentences
-
-    def _generate_initial_sentence(self, length):
-        prompt = f"Generate a random and diverse sentence of exactly {length} words."
+    def _generate_initial_sentence(self):
+        prompt = f"Generate a random and diverse sentence of no more than 10 words."
         max_retries = 3
         delay_seconds = 2
 
@@ -57,7 +48,7 @@ class WordPredictionGame:
                 response = requests.post(url, json=payload, headers=headers)
                 if response.status_code == 200:
                     sentence = response.json()["choices"][0]["message"]["content"].strip().split()
-                    if len(sentence) == length:
+                    if 1 <= len(sentence) <= 10:
                         return sentence
                 elif response.status_code == 429:
                     st.error(f"API rate limit hit.")
@@ -70,8 +61,8 @@ class WordPredictionGame:
             if attempt < max_retries - 1:
                 time.sleep(delay_seconds)
 
-        st.error(f"Failed to generate a {length}-word sentence after {max_retries} attempts.")
-        return ["The", "quick", "brown"] # Shorter fallback
+        st.error("Failed to generate an initial sentence.")
+        return ["The", "quick", "brown"]
 
     def get_word_embedding(self, word):
         if self.embedding_model:
@@ -115,9 +106,9 @@ class WordPredictionGame:
             st.error("Enter a valid word.")
             return None, None
 
-        if len(self.user_predictions) >= (len(self.initial_sentence) - self.llm_starts): # Use actual length
-            st.info("Sentence prediction complete!")
+        if len(self.user_predictions) >= (len(self.initial_sentence) - self.llm_starts):
             self.game_over = True
+            st.info("Sentence prediction complete!")
             return None, None
 
         context = self.initial_sentence[:self.llm_starts + len(self.user_predictions) + len(self.llm_predictions)]
@@ -134,26 +125,26 @@ def main():
     st.title("Word Prediction Challenge 🎲")
     st.write("Try to complete the sentence after the AI!")
 
-    sentence_length = st.sidebar.slider("Sentence Length", 7, 13, 7, 3, help="Choose sentence length.")
-
-    if 'game' not in st.session_state or st.session_state.get('sentence_length') != sentence_length:
+    if 'game' not in st.session_state:
         with st.spinner("Starting new game..."):
             try:
-                st.session_state.game = WordPredictionGame(sentence_length)
-                st.session_state['sentence_length'] = sentence_length
+                st.session_state.game = WordPredictionGame()
             except Exception as e:
                 st.error(f"Error initializing game: {e}")
                 st.stop()
 
     game = st.session_state.game
     llm_starts = game.llm_starts
-    remaining_words = len(game.initial_sentence) - len(game.user_predictions) - len(game.llm_predictions) # Use actual length
+    num_words = game.num_words
+    remaining_words = num_words - len(game.user_predictions) - len(game.llm_predictions)
 
-    st.write("### Initial Sentence:")
-    st.write(" ".join(game.initial_sentence[:llm_starts] + ["_"] * (len(game.initial_sentence) - llm_starts))) # Use actual length
+    st.write(f"The AI has generated a sentence of **{num_words}** words. Predict the rest after the first **{llm_starts}** words.")
 
-    user_sentence_display = " ".join(game.initial_sentence[:llm_starts] + game.user_predictions + ["_"] * (len(game.initial_sentence) - llm_starts - len(game.user_predictions) - len(game.llm_predictions) if (len(game.initial_sentence) - llm_starts - len(game.user_predictions) - len(game.llm_predictions)) > 0 else 0))
-    llm_sentence_display = " ".join(game.initial_sentence[:llm_starts] + game.llm_predictions + ["_"] * (len(game.initial_sentence) - llm_starts - len(game.user_predictions) - len(game.llm_predictions) if (len(game.initial_sentence) - llm_starts - len(game.user_predictions) - len(game.llm_predictions)) > 0 else 0))
+    st.write("### Initial Words:")
+    st.write(" ".join(game.initial_sentence[:llm_starts] + ["_"] * (num_words - llm_starts)))
+
+    user_sentence_display = " ".join(game.initial_sentence[:llm_starts] + game.user_predictions + ["_"] * (num_words - llm_starts - len(game.user_predictions)))
+    llm_sentence_display = " ".join(game.initial_sentence[:llm_starts] + game.llm_predictions + ["_"] * (num_words - llm_starts - len(game.llm_predictions)))
 
     st.write("### Your Sentence:")
     st.write(user_sentence_display)
