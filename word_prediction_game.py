@@ -29,7 +29,7 @@ class WordPredictionGame:
 
     def reset_game(self):
         self.initial_sentence = self._generate_initial_sentence(self.sentence_length)
-        self.llm_starts = self._get_llm_starts(self.sentence_length)
+        self.llm_starts = self._get_llm_starts(len(self.initial_sentence)) # Use actual length
         self.user_predictions = []
         self.llm_predictions = []
         self.cumulative_distance = 0
@@ -42,7 +42,7 @@ class WordPredictionGame:
             return 4
         elif length == 13:
             return 5
-        return 3
+        return max(1, length - 4) # Adjust for shorter sentences
 
     def _generate_initial_sentence(self, length):
         prompt = f"Generate a random and diverse sentence of exactly {length} words."
@@ -71,7 +71,7 @@ class WordPredictionGame:
                 time.sleep(delay_seconds)
 
         st.error(f"Failed to generate a {length}-word sentence after {max_retries} attempts.")
-        return ["The", "quick", "brown"][:length]
+        return ["The", "quick", "brown"] # Shorter fallback
 
     def get_word_embedding(self, word):
         if self.embedding_model:
@@ -115,7 +115,7 @@ class WordPredictionGame:
             st.error("Enter a valid word.")
             return None, None
 
-        if len(self.user_predictions) >= (self.sentence_length - self.llm_starts):
+        if len(self.user_predictions) >= (len(self.initial_sentence) - self.llm_starts): # Use actual length
             st.info("Sentence prediction complete!")
             self.game_over = True
             return None, None
@@ -147,13 +147,13 @@ def main():
 
     game = st.session_state.game
     llm_starts = game.llm_starts
-    remaining_words = sentence_length - len(game.user_predictions) - len(game.llm_predictions)
+    remaining_words = len(game.initial_sentence) - len(game.user_predictions) - len(game.llm_predictions) # Use actual length
 
     st.write("### Initial Sentence:")
-    st.write(" ".join(game.initial_sentence[:llm_starts] + ["_"] * (sentence_length - llm_starts)))
+    st.write(" ".join(game.initial_sentence[:llm_starts] + ["_"] * (len(game.initial_sentence) - llm_starts))) # Use actual length
 
-    user_sentence_display = " ".join(game.initial_sentence[:llm_starts] + game.user_predictions + ["_"] * (remaining_words if remaining_words > 0 else 0))
-    llm_sentence_display = " ".join(game.initial_sentence[:llm_starts] + game.llm_predictions + ["_"] * (remaining_words if remaining_words > 0 else 0))
+    user_sentence_display = " ".join(game.initial_sentence[:llm_starts] + game.user_predictions + ["_"] * (len(game.initial_sentence) - llm_starts - len(game.user_predictions) - len(game.llm_predictions) if (len(game.initial_sentence) - llm_starts - len(game.user_predictions) - len(game.llm_predictions)) > 0 else 0))
+    llm_sentence_display = " ".join(game.initial_sentence[:llm_starts] + game.llm_predictions + ["_"] * (len(game.initial_sentence) - llm_starts - len(game.user_predictions) - len(game.llm_predictions) if (len(game.initial_sentence) - llm_starts - len(game.user_predictions) - len(game.llm_predictions)) > 0 else 0))
 
     st.write("### Your Sentence:")
     st.write(user_sentence_display)
