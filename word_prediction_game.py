@@ -157,9 +157,7 @@ class WordPredictionGame:
         distance = self.calculate_distance(user_word, llm_word)
         self.cumulative_distance += distance
 
-        # Update game state
-        self.current_sentence.append(user_word)
-        self.current_sentence.append(llm_word)
+        # Update prediction history
         self.user_predictions.append(user_word)
         self.llm_predictions.append(llm_word)
 
