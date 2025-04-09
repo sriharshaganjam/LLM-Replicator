@@ -98,6 +98,10 @@ class WordPredictionGame:
             return embedding / (np.linalg.norm(embedding) + 1e-8)  # Normalize
 
     def calculate_distance(self, user_word, llm_word):
+        if self.embedding_model is None:
+            st.error("Embedding model is None in calculate_distance!")  # Debugging line
+            # Fallback to a very basic distance if the model is not loaded
+            return 1 if user_word.lower() != llm_word.lower() else 0
         user_embedding = self.get_word_embedding(user_word)
         llm_embedding = self.get_word_embedding(llm_word)
         return np.linalg.norm(user_embedding - llm_embedding)
