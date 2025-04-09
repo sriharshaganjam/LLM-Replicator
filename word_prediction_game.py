@@ -46,41 +46,42 @@ class WordPredictionGame:
         return 3  # Default
 
     def _generate_initial_sentence(self, length):
-        """Generates a random initial sentence of the specified length using Mistral."""
+        """Generates a random initial sentence of the specified length using Mistral with retries."""
         num_initial_words = self._get_llm_starts(length)
         prompt = f"Generate a random and diverse sentence of exactly {length} words."
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                url = "https://api.mistral.ai/v1/chat/completions"
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {self.mistral_api_key}"
+                }
+                payload = {
+                    "model": "mistral-small-latest",
+                    "messages": [
+                        {"role": "user", "content": prompt}
+                    ]
+                }
 
-        try:
-            url = "https://api.mistral.ai/v1/chat/completions"
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.mistral_api_key}"
-            }
-            payload = {
-                "model": "mistral-small-latest",
-                "messages": [
-                    {"role": "user", "content": prompt}
-                ]
-            }
+                response = requests.post(url, json=payload, headers=headers)
 
-            response = requests.post(url, json=payload, headers=headers)
-
-            if response.status_code == 200:
-                result = response.json()
-                sentence = result["choices"][0]["message"]["content"].strip().split()
-                if len(sentence) == length:
-                    return sentence
+                if response.status_code == 200:
+                    result = response.json()
+                    sentence = result["choices"][0]["message"]["content"].strip().split()
+                    if len(sentence) == length:
+                        return sentence
+                    else:
+                        st.warning(f"Attempt {attempt + 1}: Generated sentence has {len(sentence)} words, expected {length}. Trying again.")
                 else:
-                    st.warning(f"Generated sentence has {len(sentence)} words, expected {length}. Trying again.")
-                    return self._generate_initial_sentence(length) # Recursive call for correct length
-            else:
-                st.error(f"Error generating initial sentence: API returned status code {response.status_code}")
-                return ["The", "quick", "brown", "fox", "jumps", "over", "the", "lazy", "dog", "."][:length] # Fallback
+                    st.error(f"API error (attempt {attempt + 1}): {response.status_code}")
 
-        except Exception as e:
-            st.error(f"Error generating initial sentence: {str(e)}")
-            return ["The", "quick", "brown", "fox", "jumps", "over", "the", "lazy", "dog", "."][:length] # Fallback
+            except Exception as e:
+                st.error(f"Error during sentence generation (attempt {attempt + 1}): {str(e)}")
 
+        st.error(f"Failed to generate a sentence of {length} words after {max_retries} attempts.")
+        return ["The", "quick", "brown", "fox", "jumps", "over", "the"][:length] # More context-aware fallback
+        
     def get_word_embedding(self, word):
         if self.embedding_model:
             try:
