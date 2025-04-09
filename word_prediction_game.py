@@ -155,15 +155,17 @@ def main():
     st.write(" ".join(game.initial_sentence[:llm_starts] + ["_"] * (sentence_length - llm_starts)))
 
     prediction_data = {
-        "Your Predictions": [" ".join(game.initial_sentence[:llm_starts])] + game.user_predictions + ["_"] * (remaining_words if remaining_words > 0 else 0),
-        "AI Predictions": [" ".join(game.initial_sentence[:llm_starts])] + game.llm_predictions + ["_"] * (remaining_words if remaining_words > 0 else 0),
+        "Your Predictions": game.initial_sentence[:llm_starts] + game.user_predictions + ["_"] * (remaining_words if remaining_words > 0 else 0),
+        "AI Predictions": game.initial_sentence[:llm_starts] + game.llm_predictions + ["_"] * (remaining_words if remaining_words > 0 else 0),
     }
 
     predictions_df = pd.DataFrame(prediction_data).T
-    num_predictions = max(len(game.user_predictions), len(game.llm_predictions))
-    columns = ["Type", "Initial Words"] + [f"Prediction {i+1}" for i in range(num_predictions)]
-    predictions_df.columns = columns[:predictions_df.shape[1]]
-    st.table(predictions_df)
+    column_names = ["Words"] + [f"Prediction {i+1}" for i in range(max(len(game.user_predictions), len(game.llm_predictions)))]
+    if predictions_df.shape[1] <= len(column_names):
+        predictions_df.columns = column_names[:predictions_df.shape[1]]
+        st.table(predictions_df)
+    else:
+        st.error(f"Error: DataFrame has {predictions_df.shape[1]} columns, but trying to assign {len(column_names)} names.")
 
     st.write(f"Cumulative Embedding Distance: {game.cumulative_distance:.4f}")
 
