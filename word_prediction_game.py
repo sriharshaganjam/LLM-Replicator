@@ -5,7 +5,7 @@ import torch
 from sentence_transformers import SentenceTransformer
 import requests
 import random
-import time  # For adding delays
+import time
 
 class WordPredictionGame:
     def __init__(self, sentence_length):
@@ -19,7 +19,7 @@ class WordPredictionGame:
                 st.session_state.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
                 st.info("Sentence Transformer model loaded.")
             except Exception as e:
-                st.error(f"Error loading Sentence Transformer model: {str(e)}")
+                st.error(f"Error loading embedding model: {e}")
                 st.warning("Falling back to basic embedding.")
                 st.session_state.embedding_model = None
 
@@ -52,36 +52,23 @@ class WordPredictionGame:
         for attempt in range(max_retries):
             try:
                 url = "https://api.mistral.ai/v1/chat/completions"
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {self.mistral_api_key}"
-                }
-                payload = {
-                    "model": "mistral-small-latest",
-                    "messages": [
-                        {"role": "user", "content": prompt}
-                    ]
-                }
-
+                headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.mistral_api_key}"}
+                payload = {"model": "mistral-small-latest", "messages": [{"role": "user", "content": prompt}]}
                 response = requests.post(url, json=payload, headers=headers)
-
                 if response.status_code == 200:
-                    result = response.json()
-                    sentence = result["choices"][0]["message"]["content"].strip().split()
+                    sentence = response.json()["choices"][0]["message"]["content"].strip().split()
                     if len(sentence) == length:
                         return sentence
                     else:
-                        st.warning(f"Attempt {attempt + 1}: Generated {len(sentence)} words, expected {length}. Trying again.")
+                        st.warning(f"Attempt {attempt + 1}: Generated {len(sentence)} words, expected {length}.")
                 elif response.status_code == 429:
-                    st.error(f"API rate limit hit (attempt {attempt + 1}). Please wait.")
-                    time.sleep(delay_seconds * (attempt + 1)) # Exponential backoff
+                    st.error(f"API rate limit hit (attempt {attempt + 1)}).")
+                    time.sleep(delay_seconds * (attempt + 1))
                 else:
-                    st.error(f"API error (attempt {attempt + 1}): {response.status_code}")
-
+                    st.error(f"API error (attempt {attempt + 1)}): {response.status_code}")
             except requests.exceptions.RequestException as e:
-                st.error(f"Network error (attempt {attempt + 1}): {e}")
+                st.error(f"Network error (attempt {attempt + 1)}): {e}")
                 time.sleep(delay_seconds * (attempt + 1))
-
             if attempt < max_retries - 1:
                 time.sleep(delay_seconds)
 
@@ -105,12 +92,12 @@ class WordPredictionGame:
         llm_embedding = self.get_word_embedding(llm_word)
         return np.linalg.norm(user_embedding - llm_embedding)
 
-    def get_llm_prediction(self, context, temperature):
+    def get_llm_prediction(self, context):
         prompt = f"Given '{' '.join(context)}', predict the next single word."
         try:
             url = "https://api.mistral.ai/v1/chat/completions"
             headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.mistral_api_key}"}
-            payload = {"model": "mistral-small-latest", "messages": [{"role": "user", "content": prompt}], "temperature": temperature}
+            payload = {"model": "mistral-small-latest", "messages": [{"role": "user", "content": prompt}]}
             response = requests.post(url, json=payload, headers=headers)
             if response.status_code == 200:
                 return response.json()["choices"][0]["message"]["content"].strip()
@@ -121,7 +108,7 @@ class WordPredictionGame:
             st.error(f"LLM prediction network error: {e}")
             return ""
 
-    def play_round(self, user_word, temperature):
+    def play_round(self, user_word):
         if self.game_over:
             st.warning("Game over. Start new game.")
             return None, None
@@ -136,7 +123,7 @@ class WordPredictionGame:
             return None, None
 
         context = self.initial_sentence[:self.llm_starts + len(self.user_predictions) + len(self.llm_predictions)]
-        llm_word = self.get_llm_prediction(context, temperature)
+        llm_word = self.get_llm_prediction(context)
         if llm_word:
             distance = self.calculate_distance(user_word, llm_word)
             self.cumulative_distance += distance
@@ -161,23 +148,22 @@ def main():
                 st.stop()
 
     game = st.session_state.game
-    llm_starts = game.llm_starts  # Access llm_starts AFTER game is initialized
-
+    llm_starts = game.llm_starts
     remaining_words = sentence_length - len(game.user_predictions) - len(game.llm_predictions)
 
     st.write("### Initial Sentence:")
-    initial_display = game.initial_sentence[:llm_starts] + ["_"] * (sentence_length - llm_starts)
-    st.write(" ".join(initial_display))
+    st.write(" ".join(game.initial_sentence[:llm_starts] + ["_"] * (sentence_length - llm_starts)))
 
-    user_sentence_display = game.initial_sentence[:llm_starts] + game.user_predictions + ["_"] * (remaining_words if remaining_words > 0 else 0)
-    llm_sentence_display = game.initial_sentence[:llm_starts] + game.llm_predictions + ["_"] * (remaining_words if remaining_words > 0 else 0)
+    prediction_data = {
+        "Your Predictions": [" ".join(game.initial_sentence[:llm_starts])] + game.user_predictions + ["_"] * (remaining_words if remaining_words > 0 else 0),
+        "AI Predictions": [" ".join(game.initial_sentence[:llm_starts])] + game.llm_predictions + ["_"] * (remaining_words if remaining_words > 0 else 0),
+    }
 
-    st.write("### Your Predictions:")
-    st.write(" ".join(user_sentence_display))
-    st.write("### AI Predictions:")
-    st.write(" ".join(llm_sentence_display))
+    predictions_df = pd.DataFrame(prediction_data).iloc[[0] + list(range(1, len(prediction_data["Your Predictions"])))].T
+    predictions_df.columns = ["Initial Words"] + [f"Prediction {i+1}" for i in range(remaining_words + len(game.user_predictions))]
+    st.table(predictions_df)
 
-    st.write(f"Words Remaining: {remaining_words}")
+    st.write(f"Cumulative Embedding Distance: {game.cumulative_distance:.4f}")
 
     user_word = st.text_input("Your next prediction:")
 
@@ -186,11 +172,8 @@ def main():
         if st.button("Predict") and not game.game_over:
             if user_word:
                 with st.spinner("Getting AI prediction..."):
-                    distance, llm_word = game.play_round(user_word, st.sidebar.slider("LLM Creativity", 0.0, 1.0, 0.5))
+                    distance, llm_word = game.play_round(user_word)
                     if distance is not None:
-                        st.write(f"Distance: {distance:.4f}")
-                        st.write(f"AI predicted: {llm_word}")
-                        st.write(f"Cumulative Distance: {game.cumulative_distance:.4f}")
                         st.experimental_rerun()
             elif not user_word and not game.game_over:
                 st.warning("Please enter a word.")
