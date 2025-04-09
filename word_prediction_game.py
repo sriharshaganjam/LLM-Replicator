@@ -138,7 +138,7 @@ def main():
     num_words = game.num_words
     remaining_words = num_words - len(game.user_predictions) - len(game.llm_predictions)
 
-    st.write(f"The AI has generated a sentence of **{num_words}** words. Predict the remaining words after the first **{llm_starts}**.")
+    st.write(f"The AI has generated a sentence of **{num_words}** words. Guess the remaining **{remaining_words}** words after the first **{llm_starts}**.")
 
     st.write("### Initial Words:")
     st.write(" ".join(game.initial_sentence[:llm_starts] + ["_"] * (num_words - llm_starts)))
