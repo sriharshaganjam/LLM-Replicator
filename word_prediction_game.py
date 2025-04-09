@@ -188,10 +188,16 @@ def main():
 
     # Game configuration
     st.sidebar.header("Game Settings")
-    temperature = st.sidebar.slider("LLM Creativity", 0.0, 1.0, 0.5, 0.1)
+    temperature = st.sidebar.slider("LLM Creativity", 0.0, 1.0, 0.5, 0.1, format="%.1f",
+                                    help="Control how creative the AI is with its predictions.",
+                                    key="temperature_slider")
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("**Creativity Levels:**")
+    st.sidebar.markdown("0.0: **Sane** (More predictable)")
+    st.sidebar.markdown("1.0: **Wacky!** (Highly creative)")
 
     # Display initial context
-    st.write("### Initial Sentence:")
+    st.write("### Current Sentence:")
     st.write(" ".join(game.current_sentence))
 
     # User input
@@ -215,61 +221,26 @@ def main():
                 game.reset_game()
                 st.experimental_rerun()
 
-    # Prediction History
+    # Prediction History - Horizontal Table
     if game.user_predictions:
         st.header("Prediction History")
-        history_df = pd.DataFrame({
-            'User Predictions': game.user_predictions,
-            'LLM Predictions': game.llm_predictions
-        })
-        st.dataframe(history_df)
+        user_preds = ["You"] + game.user_predictions
+        llm_preds = ["AI"] + game.llm_predictions
 
-# Alternative Client Library Implementation
-# This is kept for reference but not used in the main code
-class MistralClientLibrary:
-    def __init__(self, api_key):
-        try:
-            # Import here to avoid errors if not used
-            from mistralai.client import MistralClient
-            from mistralai.models.chat_completion import ChatMessage
+        # Ensure both lists have the same length for the table
+        max_len = max(len(user_preds), len(llm_preds))
+        user_preds.extend([""] * (max_len - len(user_preds)))
+        llm_preds.extend([""] * (max_len - len(llm_preds)))
 
-            self.client = MistralClient(api_key=api_key)
-            self.ChatMessage = ChatMessage
-            self.use_library = True
-        except Exception as e:
-            st.warning(f"Failed to initialize Mistral client library: {str(e)}")
-            st.warning("Falling back to direct API calls.")
-            self.use_library = False
+        history_data = {"": list(range(max_len)), "Your Prediction": user_preds, "AI Prediction": llm_preds}
+        history_df = pd.DataFrame(history_data).set_index("")
+        st.table(history_df)
 
-    def chat(self, model, messages, temperature=0.7):
-        if self.use_library:
-            try:
-                # Convert to ChatMessage format
-                chat_messages = [self.ChatMessage(role=msg["role"], content=msg["content"]) for msg in messages]
-                return self.client.chat(model=model, messages=chat_messages, temperature=temperature)
-            except Exception as e:
-                st.warning(f"Error using Mistral client library: {str(e)}. Falling back to direct API calls.")
-                self.use_library = False
+    # Addressing LLM Repetition
+    st.subheader("Regarding Repetitive Predictions:")
+    st.info("The language model sometimes repeats words, especially at lower creativity levels or when it lacks strong contextual cues. Increasing the 'LLM Creativity' slider might introduce more varied predictions. However, very high creativity can lead to less coherent sentences. It's a balance!")
 
-        # Fallback to direct API call
-        if not self.use_library:
-            url = "https://api.mistral.ai/v1/chat/completions"
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}"
-            }
-            payload = {
-                "model": model,
-                "messages": messages,
-                "temperature": temperature
-            }
-
-            response = requests.post(url, json=payload, headers=headers)
-
-            if response.status_code == 200:
-                return response.json()
-            else:
-                raise Exception(f"API Error: {response.status_code} - {response.text}")
+# (The WordPredictionGame class remains the same as the previous version)
 
 if __name__ == "__main__":
     main()
