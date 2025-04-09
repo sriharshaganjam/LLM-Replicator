@@ -270,21 +270,19 @@ def create_embedding_legend():
     with col1:
         st.markdown("#### Word-Level Distance")
         st.markdown("""
-        - **0.0 - 0.5**: Words are nearly identical in meaning
-        - **0.5 - 1.0**: Words are very similar semantically
-        - **1.0 - 1.5**: Words share related concepts
-        - **1.5 - 2.5**: Words have some semantic relationship
-        - **> 2.5**: Words have little or no semantic similarity
+        - **0.0 - 0.1**: Words are nearly identical in meaning
+        - **0.11 - 0.4**: Words are very similar semantically
+        - **0.41 - 0.99**: Words share related concepts or have some semantic relationship
+        - **> 1.0**: Words have little or no semantic similarity
         """)
     
     with col2:
         st.markdown("#### Sentence-Level Distance")
         st.markdown("""
-        - **0.0 - 1.0**: Sentences convey nearly identical meaning
-        - **1.0 - 2.0**: Sentences are semantically very similar
-        - **2.0 - 3.0**: Sentences share common topics/themes
-        - **3.0 - 5.0**: Sentences have some topical overlap
-        - **> 5.0**: Sentences discuss different topics/concepts
+        - **0.0 - 0.4**: Sentences convey nearly identical meaning
+        - **0.41 - 0.6**: Sentences share common topics/themes
+        - **0.61 - 0.9**: Sentences have some topical overlap
+        - **> 0.91**: Sentences discuss different topics/concepts
         """)
     
     st.markdown("""
