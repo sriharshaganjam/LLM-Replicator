@@ -310,35 +310,40 @@ def main():
 
     st.write(f"The AI has generated a sentence of **{num_words}** words. Guess the remaining **{num_words - llm_starts}** words after the first **{llm_starts}**.")
 
-    # Display Initial Words in blue box with dark text
-    st.markdown("""
-    <div style="background-color:#3366cc; padding:10px; border-radius:5px; margin-bottom:10px;">
-        <h3 style="margin-top:0; color:#ffffff;">Initial Words:</h3>
-        <p style="font-size:16px; color:#ffffff;">
-    """, unsafe_allow_html=True)
-    st.write(" ".join(game.initial_sentence[:llm_starts] + ["_"] * (num_words - llm_starts)))
-    st.markdown("</p></div>", unsafe_allow_html=True)
-
+    # Create sentence displays
+    initial_sentence_display = " ".join(game.initial_sentence[:llm_starts] + ["_"] * (num_words - llm_starts))
     user_sentence_display = " ".join(game.initial_sentence[:llm_starts] + game.user_predictions + ["_"] * (num_words - llm_starts - len(game.user_predictions)))
     llm_sentence_display = " ".join(game.initial_sentence[:llm_starts] + game.llm_predictions + ["_"] * (num_words - llm_starts - len(game.llm_predictions)))
 
-    # Display Your Sentence in green box with dark text
-    st.markdown("""
+    # Display Initial Words directly inside blue box
+    st.markdown(f"""
+    <div style="background-color:#3366cc; padding:10px; border-radius:5px; margin-bottom:10px;">
+        <h3 style="margin-top:0; color:#ffffff;">Initial Words:</h3>
+        <p style="font-size:16px; color:#ffffff;">
+            {initial_sentence_display}
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Display Your Sentence directly inside green box
+    st.markdown(f"""
     <div style="background-color:#1e7d32; padding:10px; border-radius:5px; margin-bottom:10px;">
         <h3 style="margin-top:0; color:#ffffff;">Your Sentence:</h3>
         <p style="font-size:16px; color:#ffffff;">
+            {user_sentence_display}
+        </p>
+    </div>
     """, unsafe_allow_html=True)
-    st.write(user_sentence_display)
-    st.markdown("</p></div>", unsafe_allow_html=True)
 
-    # Display AI's Sentence in purple box with dark text
-    st.markdown("""
+    # Display AI's Sentence directly inside purple box
+    st.markdown(f"""
     <div style="background-color:#6a1b9a; padding:10px; border-radius:5px; margin-bottom:15px;">
         <h3 style="margin-top:0; color:#ffffff;">AI's Sentence:</h3>
         <p style="font-size:16px; color:#ffffff;">
+            {llm_sentence_display}
+        </p>
+    </div>
     """, unsafe_allow_html=True)
-    st.write(llm_sentence_display)
-    st.markdown("</p></div>", unsafe_allow_html=True)
     
     # Display sentence-level distance if game is over
     if game.game_over and game.sentence_distance is not None:
