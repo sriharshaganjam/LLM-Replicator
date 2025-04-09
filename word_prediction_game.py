@@ -281,7 +281,7 @@ def create_embedding_legend():
         st.markdown("""
         - **0.0 - 0.4**: Sentences convey nearly identical meaning
         - **0.41 - 0.6**: Sentences share common topics/themes
-        - **0.61 - 0.9**: Sentences have some topical overlap
+        - **0.61 - 0.90**: Sentences have some topical overlap
         - **> 0.91**: Sentences discuss different topics/concepts
         """)
     
@@ -291,7 +291,11 @@ def create_embedding_legend():
 
 def main():
     st.title("Word Prediction Challenge 🎲")
-    st.write("Try to complete the sentence after the AI!")
+    st.write("Learn to think like an LLM one word at a time, and see if your words match with the LLM's predictions")
+
+    # Initialize session state for tracking input
+    if 'input_key' not in st.session_state:
+        st.session_state.input_key = 0
 
     if 'game' not in st.session_state:
         with st.spinner("Starting new game..."):
@@ -306,7 +310,7 @@ def main():
     num_words = game.num_words
     remaining_words = num_words - llm_starts - len(game.user_predictions)
 
-    st.write(f"The AI has generated a sentence of **{num_words}** words. Guess the remaining **{num_words - llm_starts}** words after the first **{llm_starts}**.")
+    st.write(f"Our LLM has generated a sentence of **{num_words}** words. Guess the remaining **{num_words - llm_starts}** words after the first **{llm_starts}**.")
 
     # Create sentence displays
     initial_sentence_display = " ".join(game.initial_sentence[:llm_starts] + ["_"] * (num_words - llm_starts))
@@ -351,7 +355,12 @@ def main():
         </div>
         """, unsafe_allow_html=True)
 
-    user_word = st.text_input("Your next word:", max_chars=20, help="Enter one word at a time.")
+    # Use the key to force text_input to reset
+    user_word = st.text_input("Your next word:", max_chars=20, key=f"word_input_{st.session_state.input_key}", help="Enter one word at a time.")
+
+    def reset_input():
+        # Increment the key to force the text input to reset
+        st.session_state.input_key += 1
 
     col1, col2 = st.columns(2)
     with col1:
@@ -362,6 +371,8 @@ def main():
                     with st.spinner("Getting AI prediction..."):
                         distance, llm_word = game.play_round(user_word)
                         if distance is not None:
+                            # Reset the input field before rerunning
+                            reset_input()
                             st.experimental_rerun()
                 else:
                     st.error("Please enter only one word for your prediction.")
@@ -373,6 +384,7 @@ def main():
     with col2:
         if st.button("New Game"):
             st.session_state.pop('game', None)
+            reset_input()  # Also reset input when starting a new game
             st.experimental_rerun()
     
     # Display word-level distances table
