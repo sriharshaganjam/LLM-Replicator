@@ -34,23 +34,26 @@ class WordPredictionGame:
         self.llm_predictions = []
         self.cumulative_distance = 0
         self.game_over = False
+        # Store the original complete sentence for better LLM prediction
+        self.original_complete_sentence = self.initial_sentence.copy()
 
     def _generate_initial_sentence(self):
         # List of different prompt templates to get more variety
         prompt_templates = [
-            "Generate a short interesting sentence about {topic} with around {length} words. The sentence must be grammatically correct and meaningful.",
-            "Write a clear, complete sentence about {topic} using around {length} words. Make it compelling and varied.",
-            "Create a {length}-word sentence about {topic}. Ensure it's grammatically correct and interesting."
+            "Generate a coherent, complete sentence about {topic} with exactly {length} words. The sentence must be grammatically correct and meaningful. Do not include quotation marks or periods.",
+            "Write a clear, complete sentence about {topic} using exactly {length} words. Make it compelling and varied. Avoid special characters, quotes or periods.",
+            "Create a straightforward {length}-word sentence about {topic}. Ensure it's grammatically correct and interesting. No quotes or periods."
         ]
         
         topics = [
             "nature", "technology", "history", "food", "travel", 
             "science", "art", "sports", "music", "literature",
-            "ocean", "mountains", "cities", "animals", "weather"
+            "ocean", "mountains", "cities", "animals", "weather",
+            "education", "health", "economy", "architecture", "space"
         ]
         
         # Generate a random sentence length between 5 and 10 words
-        length = random.randint(5, 10)
+        length = random.randint(5, 8)
         topic = random.choice(topics)
         prompt = random.choice(prompt_templates).format(topic=topic, length=length)
         
@@ -64,18 +67,18 @@ class WordPredictionGame:
                 payload = {
                     "model": "mistral-small-latest", 
                     "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0.7,  # Add some randomness but not too much
+                    "temperature": 0.5,
                     "max_tokens": 30
                 }
                 response = requests.post(url, json=payload, headers=headers)
                 if response.status_code == 200:
                     sentence_text = response.json()["choices"][0]["message"]["content"].strip()
                     # Clean up the sentence - remove periods, quotation marks, etc.
-                    sentence_text = sentence_text.replace('"', '').replace("'", "").strip(".")
+                    sentence_text = sentence_text.replace('"', '').replace("'", "").strip(".!?")
                     sentence = sentence_text.split()
                     
                     # Verify we have a good sentence of appropriate length
-                    if 4 <= len(sentence) <= 10 and len(set(sentence)) == len(sentence):  # No repeated words
+                    if 4 <= len(sentence) <= 10 and len(set(sentence)) >= len(sentence) * 0.8:  # Allow some repeats like "the", "a"
                         return sentence
                     
                 elif response.status_code == 429:
@@ -117,12 +120,24 @@ class WordPredictionGame:
         return np.linalg.norm(user_embedding - llm_embedding)
 
     def get_llm_prediction(self, context):
-        # Check if context already has words and use a more specific prompt
-        if context:
-            context_text = ' '.join(context)
-            prompt = f"Complete this sentence by adding one word after '{context_text}'. Provide exactly ONE word that would naturally follow in this context. The word should make grammatical sense and help form a coherent sentence."
-        else:
-            prompt = "Provide a single word to start a sentence."
+        # Instead of asking the LLM to predict the next word,
+        # we'll use a stronger systematic approach to ensure coherence
+        
+        # Method 1: Use a "cloze" task with the context
+        context_text = ' '.join(context)
+        position = len(context)
+        
+        if position < len(self.initial_sentence):
+            # We know the actual next word from initial generation
+            return self.initial_sentence[position]
+        
+        # Method 2: Ask LLM for a very specific next word
+        prompt = f"""Given this sentence beginning: "{context_text}"
+
+Please predict ONLY the SINGLE NEXT WORD that would make the most grammatical and semantic sense to continue this sentence.
+You must return EXACTLY ONE WORD with no punctuation, quotation marks, or explanation.
+
+Next word:"""
             
         try:
             url = "https://api.mistral.ai/v1/chat/completions"
@@ -130,39 +145,69 @@ class WordPredictionGame:
             payload = {
                 "model": "mistral-small-latest", 
                 "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.4,  # Lower temperature for more predictable responses
-                "max_tokens": 5  # Limit tokens to avoid getting more than one word
+                "temperature": 0.2,  # Very low temperature for predictability
+                "max_tokens": 3  # Strict limit on tokens
             }
             response = requests.post(url, json=payload, headers=headers)
+            
             if response.status_code == 200:
-                # Extract just the first word from the response
-                prediction = response.json()["choices"][0]["message"]["content"].strip()
-                prediction = prediction.split()[0].strip(".,!?;:")  # Get first word and remove punctuation
+                # Extract just one word, processing carefully
+                prediction_text = response.json()["choices"][0]["message"]["content"].strip()
+                words = prediction_text.split()
+                if words:
+                    prediction = words[0].strip(".,!?;:\"'()[]{}").lower()
+                    
+                    # Check if it's a duplicate of any previous word
+                    if prediction.lower() in [w.lower() for w in context[-3:]]:
+                        # Try again with explicit instruction to avoid that word
+                        avoid_words = [w.lower() for w in context[-3:]]
+                        alt_prompt = f"""Given this sentence beginning: "{context_text}"
+
+Please predict the SINGLE NEXT WORD that would make grammatical and semantic sense.
+DO NOT use any of these words: {', '.join(avoid_words)}
+Return EXACTLY ONE WORD with no punctuation or explanation.
+
+Next word:"""
+                        
+                        alt_payload = {
+                            "model": "mistral-small-latest", 
+                            "messages": [{"role": "user", "content": alt_prompt}],
+                            "temperature": 0.5,
+                            "max_tokens": 3
+                        }
+                        
+                        alt_response = requests.post(url, json=alt_payload, headers=headers)
+                        if alt_response.status_code == 200:
+                            alt_text = alt_response.json()["choices"][0]["message"]["content"].strip()
+                            alt_words = alt_text.split()
+                            if alt_words:
+                                prediction = alt_words[0].strip(".,!?;:\"'()[]{}").lower()
+                    
+                    # Make sure we have a real word
+                    if len(prediction) >= 2:  # Avoid single letters except maybe "a" or "I"
+                        return prediction
+                    elif len(prediction) == 1 and prediction in ['a', 'i']:
+                        return prediction
                 
-                # Check if the predicted word is already in the context to avoid repetition
-                if prediction.lower() in [w.lower() for w in context]:
-                    # If there's repetition, ask for an alternative
-                    alt_prompt = f"Provide a different single word (not '{prediction}') that could follow '{context_text}' in a sentence."
-                    alt_payload = {
-                        "model": "mistral-small-latest", 
-                        "messages": [{"role": "user", "content": alt_prompt}],
-                        "temperature": 0.7,  # Higher temperature for more variety
-                        "max_tokens": 5
-                    }
-                    alt_response = requests.post(url, json=alt_payload, headers=headers)
-                    if alt_response.status_code == 200:
-                        prediction = alt_response.json()["choices"][0]["message"]["content"].strip().split()[0].strip(".,!?;:")
-                
-                return prediction
+                # Fallback to basic words that often work
+                return self._get_fallback_word(context)
             else:
                 st.error(f"LLM prediction API error: {response.status_code}")
-                return ""
-        except requests.exceptions.RequestException as e:
-            st.error(f"LLM prediction network error: {e}")
-            return ""
-        except IndexError:
-            # If there's an issue parsing the response
-            return "the"  # Safe fallback
+                return self._get_fallback_word(context)
+        except Exception as e:
+            st.error(f"Error in LLM prediction: {e}")
+            return self._get_fallback_word(context)
+
+    def _get_fallback_word(self, context):
+        # Common words that often work well in most sentences
+        fallbacks = ["the", "to", "of", "in", "and", "with", "for", "that", "by", "as"]
+        
+        # Try to pick one that hasn't been used recently
+        for word in fallbacks:
+            if word not in [w.lower() for w in context[-3:]]:
+                return word
+        
+        return random.choice(fallbacks)
 
     def play_round(self, user_word):
         if self.game_over:
