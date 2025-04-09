@@ -62,12 +62,12 @@ class WordPredictionGame:
                     else:
                         st.warning(f"Attempt {attempt + 1}: Generated {len(sentence)} words, expected {length}.")
                 elif response.status_code == 429:
-                    st.error(f"API rate limit hit (attempt {attempt + 1)}).")
+                    st.error(f"API rate limit hit (attempt {attempt + 1}).")
                     time.sleep(delay_seconds * (attempt + 1))
                 else:
-                    st.error(f"API error (attempt {attempt + 1)}): {response.status_code}")
+                    st.error(f"API error (attempt {attempt + 1}): {response.status_code}")
             except requests.exceptions.RequestException as e:
-                st.error(f"Network error (attempt {attempt + 1)}): {e}")
+                st.error(f"Network error (attempt {attempt + 1}): {e}")
                 time.sleep(delay_seconds * (attempt + 1))
             if attempt < max_retries - 1:
                 time.sleep(delay_seconds)
