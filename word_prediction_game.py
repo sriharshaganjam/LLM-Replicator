@@ -154,22 +154,17 @@ def main():
     st.write("### Initial Sentence:")
     st.write(" ".join(game.initial_sentence[:llm_starts] + ["_"] * (sentence_length - llm_starts)))
 
-    prediction_data = {
-        "Your Predictions": game.initial_sentence[:llm_starts] + game.user_predictions + ["_"] * (remaining_words if remaining_words > 0 else 0),
-        "AI Predictions": game.initial_sentence[:llm_starts] + game.llm_predictions + ["_"] * (remaining_words if remaining_words > 0 else 0),
-    }
+    user_sentence_display = " ".join(game.initial_sentence[:llm_starts] + game.user_predictions + ["_"] * (remaining_words if remaining_words > 0 else 0))
+    llm_sentence_display = " ".join(game.initial_sentence[:llm_starts] + game.llm_predictions + ["_"] * (remaining_words if remaining_words > 0 else 0))
 
-    predictions_df = pd.DataFrame(prediction_data).T
-    column_names = ["Words"] + [f"Prediction {i+1}" for i in range(max(len(game.user_predictions), len(game.llm_predictions)))]
-    if predictions_df.shape[1] <= len(column_names):
-        predictions_df.columns = column_names[:predictions_df.shape[1]]
-        st.table(predictions_df)
-    else:
-        st.error(f"Error: DataFrame has {predictions_df.shape[1]} columns, but trying to assign {len(column_names)} names.")
+    st.write("### Your Sentence:")
+    st.write(user_sentence_display)
+    st.write("### AI's Sentence:")
+    st.write(llm_sentence_display)
 
     st.write(f"Cumulative Embedding Distance: {game.cumulative_distance:.4f}")
 
-    user_word = st.text_input("Your next prediction:")
+    user_word = st.text_input("Your next word:", max_chars=20, help="Enter one word at a time.")
 
     col1, col2 = st.columns(2)
     with col1:
